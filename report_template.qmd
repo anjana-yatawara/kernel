@@ -1,0 +1,134 @@
+---
+title: "Analytical Workbench Report"
+subtitle: "Parameterized report template for reproducible EDA, categorical analysis, GLMs, and DOE"
+author: "Analytical Workbench Pro"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    theme: flatly
+  docx:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  dataset_path: "data.csv"
+  dataset_label: "Uploaded dataset"
+  assoc_x: null
+  assoc_y: null
+  model_formula: null
+  doe_formula: null
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(readxl)
+
+read_any <- function(path) {
+  ext <- tolower(tools::file_ext(path))
+  if (ext == "csv") return(readr::read_csv(path, show_col_types = FALSE))
+  if (ext %in% c("xlsx", "xls")) return(readxl::read_excel(path))
+  if (ext == "tsv") return(readr::read_tsv(path, show_col_types = FALSE))
+  if (ext == "txt") return(readr::read_delim(path, delim = ",", show_col_types = FALSE))
+  stop("Unsupported file type for template. Extend read_any() as needed.")
+}
+
+df <- read_any(params$dataset_path)
+num_vars <- names(df)[vapply(df, is.numeric, logical(1))]
+cat_vars <- names(df)[vapply(df, function(x) is.factor(x) || is.character(x) || is.logical(x), logical(1))]
+```
+
+# Executive summary
+
+**Dataset:** `r params$dataset_label`  
+**Rows:** `r nrow(df)`  
+**Columns:** `r ncol(df)`  
+**Numeric variables:** `r length(num_vars)`  
+**Categorical-like variables:** `r length(cat_vars)`
+
+# Data profile
+
+```{r}
+profile <- tibble(
+  variable = names(df),
+  type = vapply(df, function(x) paste(class(x), collapse = "/"), character(1)),
+  missing_n = vapply(df, function(x) sum(is.na(x)), numeric(1)),
+  missing_pct = round(vapply(df, function(x) mean(is.na(x)) * 100, numeric(1)), 2),
+  distinct_n = vapply(df, function(x) dplyr::n_distinct(x, na.rm = TRUE), numeric(1))
+)
+profile
+```
+
+## Missingness
+
+```{r}
+ggplot(profile, aes(x = reorder(variable, missing_pct), y = missing_pct)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = NULL, y = "Missing (%)", title = "Missingness by variable") +
+  theme_minimal(base_size = 12)
+```
+
+# Univariate review
+
+```{r}
+if (length(num_vars)) {
+  first_num <- num_vars[1]
+  ggplot(df, aes(x = .data[[first_num]])) +
+    geom_histogram(bins = 30, color = "white") +
+    labs(title = paste("Histogram of", first_num), x = first_num, y = "Count") +
+    theme_minimal(base_size = 12)
+}
+```
+
+```{r}
+if (length(cat_vars)) {
+  first_cat <- cat_vars[1]
+  ggplot(df, aes(x = .data[[first_cat]])) +
+    geom_bar() +
+    coord_flip() +
+    labs(title = paste("Bar chart of", first_cat), x = first_cat, y = "Count") +
+    theme_minimal(base_size = 12)
+}
+```
+
+# Categorical association
+
+```{r}
+if (!is.null(params$assoc_x) && !is.null(params$assoc_y) && all(c(params$assoc_x, params$assoc_y) %in% names(df))) {
+  tbl <- table(df[[params$assoc_x]], df[[params$assoc_y]])
+  tbl
+  chisq.test(tbl)
+}
+```
+
+# Regression / GLM
+
+```{r}
+if (!is.null(params$model_formula)) {
+  model_formula <- as.formula(params$model_formula)
+  fit <- lm(model_formula, data = df)
+  summary(fit)
+}
+```
+
+# DOE analysis
+
+```{r}
+if (!is.null(params$doe_formula)) {
+  doe_formula <- as.formula(params$doe_formula)
+  doe_fit <- lm(doe_formula, data = df)
+  anova(doe_fit)
+}
+```
+
+# Notes for extension
+
+- Replace the placeholder `lm()` call with `glm()`, `nnet::multinom()`, `ordinal::clm()`, `MASS::glm.nb()`, or `pscl::zeroinfl()` depending on the selected model family.
+- Add `FactoMineR` sections for PCA/MCA/FAMD when those packages are available.
+- Add DOE-generation code chunks when you want the report to include generated designs, alias structures, or response-surface plots.
