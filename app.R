@@ -25,6 +25,39 @@ APP_DIR <- locate_app_dir()
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0 || (length(x) == 1 && is.na(x)) || identical(x, "")) y else x
 has_pkg <- function(pkg) requireNamespace(pkg, quietly = TRUE)
 
+# ══════════════════════════════════════════════════════════════
+# KERNEL THEME
+# ══════════════════════════════════════════════════════════════
+
+kernel_colors <- list(
+  primary   = "#2C5A8F",
+  dark      = "#1B3D66",
+  bg        = "#EBF1F9",
+  border    = "#C5D6EB",
+  teal      = "#14B8A6",
+  red       = "#DC3545",
+  orange    = "#FD7E14",
+  green     = "#198754",
+  purple    = "#6F42C1",
+  pink      = "#D63384"
+)
+
+theme_kernel <- function(base_size = 13) {
+  theme_minimal(base_size = base_size) %+replace%
+    theme(
+      plot.title = element_text(color = "#1B3D66", face = "bold", size = base_size + 2, margin = margin(b = 8)),
+      plot.subtitle = element_text(color = "#5A7BA6", size = base_size - 1),
+      axis.title = element_text(color = "#1B3D66"),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "#E8EDF2"),
+      legend.position = "bottom"
+    )
+}
+
+# ══════════════════════════════════════════════════════════════
+# UTILITY FUNCTIONS
+# ══════════════════════════════════════════════════════════════
+
 clean_names_base <- function(x) {
   x <- tolower(x); x <- gsub("[^a-z0-9]+", "_", x); x <- gsub("(^_+|_+$)", "", x); make.unique(x, sep = "_")
 }
@@ -339,7 +372,7 @@ run_hypothesis_test <- function(df, test_name, var1, var2=NULL, mu0=0, p0=0.5, c
       "Sign test"={pos<-sum(x>mu0);neg<-sum(x<mu0);nn<-pos+neg;pv<-2*min(pbinom(min(pos,neg),nn,0.5),1); data.frame(statistic=c("Positive","Negative","p-value"),value=c(pos,neg,signif(min(pv,1),4)),stringsAsFactors=FALSE)},
       "Binomial test"={s<-sum(x==1|x==TRUE);n<-length(x);bt<-binom.test(s,n,p=p0); data.frame(statistic=c("Successes","Trials","Proportion","p-value"),value=c(bt$statistic,bt$parameter,round(bt$estimate,4),signif(bt$p.value,4)),stringsAsFactors=FALSE)},
       "Chi-square GOF"={tab<-table(factor(x));ct<-chisq.test(tab); data.frame(statistic=c("Chi-sq","df","p-value"),value=c(round(ct$statistic,4),ct$parameter,signif(ct$p.value,4)),stringsAsFactors=FALSE)},
-      "Welch t-test"={stopifnot(!is.null(y));g<-factor(y);levs<-levels(g);tt<-t.test(x[g==levs[1]],x[g==levs[2]]); data.frame(statistic=c("t","df","p-value","Mean1","Mean2","Cohen d"),value=c(round(tt$statistic,4),round(tt$parameter,2),signif(tt$p.value,4),round(tt$estimate[1],4),round(tt$estimate[2],4),round(abs(diff(tt$estimate))/sqrt(mean(c(var(x[g==levs[1]]),var(x[g==levs[2]])))),4)),stringsAsFactors=FALSE)},
+      "Welch t-test"={stopifnot(!is.null(y));g<-factor(y);levs<-levels(g);x1<-x[g==levs[1]];x2<-x[g==levs[2]];tt<-t.test(x1,x2); data.frame(statistic=c("t","df","p-value","Mean1","Mean2","Cohen d"),value=c(round(tt$statistic,4),round(tt$parameter,2),signif(tt$p.value,4),round(tt$estimate[1],4),round(tt$estimate[2],4),round(abs(diff(tt$estimate))/sqrt(mean(c(var(x1),var(x2)))),4)),stringsAsFactors=FALSE)},
       "Paired t-test"={stopifnot(!is.null(y));cc<-complete.cases(df[[var1]],df[[var2]]);tt<-t.test(df[[var1]][cc],df[[var2]][cc],paired=TRUE); data.frame(statistic=c("t","df","p-value","Mean diff"),value=c(round(tt$statistic,4),round(tt$parameter,2),signif(tt$p.value,4),round(tt$estimate,4)),stringsAsFactors=FALSE)},
       "Mann-Whitney U"={stopifnot(!is.null(y));g<-factor(y);levs<-levels(g);wt<-wilcox.test(x[g==levs[1]],x[g==levs[2]],exact=FALSE); data.frame(statistic=c("W","p-value"),value=c(round(wt$statistic,2),signif(wt$p.value,4)),stringsAsFactors=FALSE)},
       "Wilcoxon paired"={stopifnot(!is.null(y));cc<-complete.cases(df[[var1]],df[[var2]]);wt<-wilcox.test(df[[var1]][cc],df[[var2]][cc],paired=TRUE,exact=FALSE); data.frame(statistic=c("V","p-value"),value=c(round(wt$statistic,2),signif(wt$p.value,4)),stringsAsFactors=FALSE)},
@@ -348,7 +381,7 @@ run_hypothesis_test <- function(df, test_name, var1, var2=NULL, mu0=0, p0=0.5, c
       "Kruskal-Wallis"={stopifnot(!is.null(y));kt<-kruskal.test(x~factor(y)); data.frame(statistic=c("H","df","p-value"),value=c(round(kt$statistic,4),kt$parameter,signif(kt$p.value,4)),stringsAsFactors=FALSE)},
       "Tukey HSD"={stopifnot(!is.null(y));tk<-TukeyHSD(aov(x~factor(y)));out<-as.data.frame(tk[[1]]);out$comparison<-rownames(out);rownames(out)<-NULL;out},
       "Shapiro-Wilk"={xs<-if(length(x)>5000) sample(x,5000) else x;sw<-shapiro.test(xs); data.frame(statistic=c("W","p-value","Verdict"),value=c(round(sw$statistic,5),signif(sw$p.value,4),ifelse(sw$p.value<0.05,"Non-normal","Normal OK")),stringsAsFactors=FALSE)},
-      "Anderson-Darling"={xs<-sort(x);nn<-length(xs);mn<-mean(xs);sd<-sd(xs);z<-pnorm((xs-mn)/sd);z<-pmax(pmin(z,1-1e-10),1e-10);S<-sum((2*seq_len(nn)-1)*(log(z)+log(1-rev(z))))/nn;A2<--nn-S; data.frame(statistic=c("A-squared","p (approx)"),value=c(round(A2,4),"See tables"),stringsAsFactors=FALSE)},
+      "Anderson-Darling"={xs<-sort(x);nn<-length(xs);mn<-mean(xs);sdd<-sd(xs);z<-pnorm((xs-mn)/sdd);z<-pmax(pmin(z,1-1e-10),1e-10);S<-sum((2*seq_len(nn)-1)*(log(z)+log(1-rev(z))))/nn;A2<--nn-S; data.frame(statistic=c("A-squared","p (approx)"),value=c(round(A2,4),"See tables"),stringsAsFactors=FALSE)},
       "Kolmogorov-Smirnov"={ks<-ks.test(x,"pnorm",mean(x),sd(x)); data.frame(statistic=c("D","p-value"),value=c(round(ks$statistic,5),signif(ks$p.value,4)),stringsAsFactors=FALSE)},
       "Power: t-test"={d_vals<-c(0.2,0.5,0.8);ns<-sapply(d_vals,function(d)ceiling(power.t.test(delta=d,sd=1,sig.level=alpha,power=0.8)$n)); data.frame(statistic=paste0("d=",d_vals),value=paste0("n=",ns),stringsAsFactors=FALSE)},
       data.frame(statistic="Error",value=paste0("Unknown test: ",test_name),stringsAsFactors=FALSE)
@@ -370,8 +403,8 @@ interpret_p_value <- function(p, alpha=0.05) {
 interpret_r_squared <- function(r2, adj_r2=NULL) {
   pct <- round(r2*100,1)
   q <- if(r2>=0.9)"excellent" else if(r2>=0.7)"good" else if(r2>=0.5)"moderate" else "weak"
-  msg <- paste0("R² = ",round(r2,4),". Model explains ",pct,"% of variance (",q," fit).")
-  if (!is.null(adj_r2)) msg <- paste0(msg," Adjusted R² = ",round(adj_r2,4),".")
+  msg <- paste0("R\u00B2 = ",round(r2,4),". Model explains ",pct,"% of variance (",q," fit).")
+  if (!is.null(adj_r2)) msg <- paste0(msg," Adjusted R\u00B2 = ",round(adj_r2,4),".")
   msg
 }
 
@@ -526,233 +559,478 @@ compute_rfm <- function(df, cust_col, date_col, amt_col) {
 }
 
 # ══════════════════════════════════════════════════════════════
-# UI DEFINITION
+# UI DEFINITION — V2 (navbarPage + dropdowns)
 # ══════════════════════════════════════════════════════════════
 
-ui <- fluidPage(
+kernel_css <- HTML("
+  /* ── Kernel v2 Blue Palette ── */
+  :root {
+    --kernel-primary: #2C5A8F;
+    --kernel-dark: #1B3D66;
+    --kernel-bg: #EBF1F9;
+    --kernel-border: #C5D6EB;
+    --kernel-teal: #14B8A6;
+  }
+  body { background: var(--kernel-bg); font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+  /* Navbar */
+  .navbar { background: linear-gradient(135deg, #1B3D66 0%, #2C5A8F 100%) !important; border: none !important; box-shadow: 0 2px 12px rgba(27,61,102,0.18); }
+  .navbar-brand { font-weight: 700 !important; font-size: 1.35rem !important; letter-spacing: -0.02em; }
+  .navbar .nav-link { color: rgba(255,255,255,0.85) !important; font-weight: 500; font-size: 0.9rem; }
+  .navbar .nav-link:hover, .navbar .nav-link.active { color: #fff !important; }
+  .navbar .dropdown-menu { border: 1px solid var(--kernel-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+
+  /* Cards */
+  .stat-card {
+    background: #fff; border: 1px solid var(--kernel-border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(44,90,143,0.06);
+    transition: box-shadow 0.2s;
+  }
+  .stat-card:hover { box-shadow: 0 4px 16px rgba(44,90,143,0.12); }
+  .stat-card .label { font-size: 0.78rem; text-transform: uppercase; color: #7A99B8; letter-spacing: 0.05em; font-weight: 600; }
+  .stat-card .value { font-size: 1.7rem; font-weight: 700; color: var(--kernel-dark); margin-top: 2px; }
+
+  /* Section notes */
+  .section-note {
+    background: #fff; border-left: 4px solid var(--kernel-primary); padding: 14px 18px;
+    border-radius: 0 10px 10px 0; margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(44,90,143,0.06);
+  }
+  .section-note h4 { margin-top: 0; color: var(--kernel-dark); font-size: 1.1rem; }
+  .section-note p { margin-bottom: 0; color: #5A7BA6; font-size: 0.92rem; }
+
+  /* Content panels */
+  .content-card {
+    background: #fff; border: 1px solid var(--kernel-border); border-radius: 12px;
+    padding: 20px 24px; margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(44,90,143,0.05);
+  }
+
+  /* Sidebar */
+  .well { background: #fff !important; border: 1px solid var(--kernel-border) !important; border-radius: 12px !important; box-shadow: 0 2px 8px rgba(44,90,143,0.06) !important; }
+
+  /* Buttons */
+  .btn-primary { background: var(--kernel-primary) !important; border-color: var(--kernel-primary) !important; border-radius: 8px !important; font-weight: 600; }
+  .btn-primary:hover { background: var(--kernel-dark) !important; }
+  .btn-danger { background: #DC3545 !important; border-radius: 8px !important; font-weight: 600; }
+  .btn-success { background: #198754 !important; border-radius: 8px !important; font-weight: 600; }
+  .btn-outline-primary { color: var(--kernel-primary) !important; border-color: var(--kernel-primary) !important; border-radius: 8px !important; }
+
+  /* Pills */
+  .nav-pills .nav-link.active { background: var(--kernel-primary) !important; color: #fff !important; border-radius: 8px; }
+  .nav-pills .nav-link { color: var(--kernel-dark); border-radius: 8px; font-weight: 500; }
+
+  /* DT tables */
+  .dataTables_wrapper { font-size: 0.88rem; }
+  table.dataTable thead th { background: var(--kernel-bg); color: var(--kernel-dark); font-weight: 600; border-bottom: 2px solid var(--kernel-border) !important; }
+
+  /* Inputs */
+  .form-control, .selectize-input { border-radius: 8px !important; border-color: var(--kernel-border) !important; }
+  .form-control:focus, .selectize-input.focus { border-color: var(--kernel-primary) !important; box-shadow: 0 0 0 3px rgba(44,90,143,0.15) !important; }
+
+  /* Tab content spacing */
+  .tab-content > .tab-pane { padding-top: 8px; }
+
+  /* Data input card */
+  .data-input-card { background: #fff; border: 1px solid var(--kernel-border); border-radius: 12px; padding: 20px; margin-bottom: 12px; }
+")
+
+# Helper for section notes
+note_div <- function(..., color = "#2C5A8F") {
+  div(class = "section-note", style = paste0("border-left-color:", color, ";"), ...)
+}
+
+ui <- navbarPage(
+  title = span(HTML("&#127793;"), " Kernel"),
+  id = "main_nav",
   theme = bs_theme(version = 5, bootswatch = "flatly"),
-  tags$head(tags$style(HTML("
-    .stat-card {background:#fff;border:1px solid #e9ecef;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,0.05);}
-    .stat-card .label {font-size:0.82rem;text-transform:uppercase;color:#6c757d;letter-spacing:0.04em;}
-    .stat-card .value {font-size:1.65rem;font-weight:700;color:#212529;}
-    .tab-note {background:#f8f9fa;border-left:4px solid #0d6efd;padding:12px 14px;border-radius:6px;margin-bottom:12px;}
-  "))),
-  titlePanel("Kernel"),
-  sidebarLayout(
-    sidebarPanel(width = 3,
-      h4("Import & Export"),
-      fileInput("file", "Choose data file", accept = c(".csv",".tsv",".txt",".xlsx",".xls",".rds",".RData",".sav",".dta",".sas7bdat",".xpt",".feather",".parquet")),
-      uiOutput("import_detail_ui"),
-      checkboxInput("clean_names", "Clean column names", TRUE),
-      checkboxInput("drop_empty", "Drop empty rows/columns", TRUE),
-      tags$hr(),
-      downloadButton("download_clean_data", "Clean data (.csv)", class = "btn-primary"),
-      downloadButton("download_profile", "Column profile (.csv)"),
-      downloadButton("download_methods", "Method catalog (.csv)"),
-      downloadButton("download_design", "DOE design (.csv)")
+  header = tags$head(tags$style(kernel_css)),
+  windowTitle = "Kernel \u2014 Statistical Analysis Platform",
+
+  # ════════════════════════════════════════
+  # DATA TAB
+  # ════════════════════════════════════════
+  navbarMenu("Data", icon = icon("database"),
+
+    tabPanel("Overview",
+      sidebarLayout(
+        sidebarPanel(width = 3,
+          div(class = "data-input-card",
+            h5(style = "color:#1B3D66; font-weight:700; margin-top:0;", "Import Data"),
+            tabsetPanel(id = "input_method", type = "pills",
+              tabPanel("File",
+                br(),
+                fileInput("file", NULL, accept = c(".csv",".tsv",".txt",".xlsx",".xls",".rds",".RData",".sav",".dta",".sas7bdat",".xpt",".feather",".parquet"),
+                  buttonLabel = "Browse...", placeholder = "No file selected"),
+                uiOutput("import_detail_ui")
+              ),
+              tabPanel("Paste",
+                br(),
+                textAreaInput("paste_data", NULL, rows = 6, placeholder = "Paste CSV or TSV data here...\ncol1,col2,col3\n1,2,3"),
+                actionButton("load_paste", "Load pasted data", class = "btn-primary btn-sm", icon = icon("paste"))
+              ),
+              tabPanel("URL",
+                br(),
+                textInput("url_input", NULL, placeholder = "https://example.com/data.csv"),
+                actionButton("load_url", "Fetch & load", class = "btn-primary btn-sm", icon = icon("globe"))
+              ),
+              tabPanel("Sample",
+                br(),
+                selectInput("sample_ds", NULL, c("mtcars","iris","airquality","ToothGrowth","PlantGrowth","ChickWeight","USArrests","faithful","swiss","sleep","chickwts","InsectSprays","warpbreaks")),
+                actionButton("load_sample", "Load dataset", class = "btn-success btn-sm", icon = icon("download")),
+                uiOutput("sample_info")
+              )
+            ),
+            tags$hr(style="border-color:#C5D6EB;"),
+            checkboxInput("clean_names", "Clean column names", TRUE),
+            checkboxInput("drop_empty", "Drop empty rows/columns", TRUE)
+          ),
+          tags$hr(),
+          downloadButton("download_clean_data", "Clean data (.csv)", class = "btn-primary btn-sm"),
+          br(), br(),
+          downloadButton("download_profile", "Column profile (.csv)", class = "btn-outline-primary btn-sm")
+        ),
+        mainPanel(width = 9,
+          fluidRow(
+            column(3, uiOutput("card_rows")), column(3, uiOutput("card_cols")),
+            column(3, uiOutput("card_numeric")), column(3, uiOutput("card_categorical"))
+          ),
+          note_div(uiOutput("insight_notes")),
+          div(class = "content-card", h4("Data Preview", style="color:#1B3D66;"), DTOutput("data_preview"))
+        )
+      )
     ),
-    mainPanel(width = 9,
-      tabsetPanel(id = "main_tabs",
 
-        # ── OVERVIEW ──
-        tabPanel("Overview", br(),
-          fluidRow(column(3,uiOutput("card_rows")),column(3,uiOutput("card_cols")),column(3,uiOutput("card_numeric")),column(3,uiOutput("card_categorical"))),
-          div(class="tab-note",uiOutput("insight_notes")),
-          fluidRow(column(7,h4("Data preview"),DTOutput("data_preview")),column(5,h4("Package status"),DTOutput("pkg_tbl")))
+    tabPanel("Data Quality",
+      fluidRow(
+        column(7, div(class="content-card", h4("Column Profile", style="color:#1B3D66;"), DTOutput("col_prof_tbl"))),
+        column(5, div(class="content-card", h4("Missingness", style="color:#1B3D66;"), plotOutput("miss_plot", height=360)))
+      ),
+      fluidRow(column(12, div(class="content-card", plotOutput("type_plot", height=280))))
+    ),
+
+    tabPanel("Variable Doctor",
+      note_div(h4(icon("stethoscope"), " Variable Doctor"), p("Intelligent diagnostics for every column. One-click fixes with undo."), color="#198754"),
+      fluidRow(column(3,uiOutput("doc_card_crit")),column(3,uiOutput("doc_card_warn")),column(3,uiOutput("doc_card_info")),column(3,uiOutput("doc_card_healthy"))),
+      fluidRow(column(12,
+        actionButton("doc_fix_all","Fix all critical",class="btn-danger",icon=icon("wrench")),
+        actionButton("doc_undo","Undo all",class="btn-outline-secondary",icon=icon("rotate-left")),
+        downloadButton("doc_report","Report (.csv)",class="btn-outline-primary")
+      )), br(),
+      div(class="content-card", DTOutput("doc_table")), br(),
+      fluidRow(column(6, div(class="content-card", plotOutput("doc_health",height=300))), column(6, div(class="content-card", h4("Fix Log", style="color:#1B3D66;"), uiOutput("doc_log"))))
+    )
+  ),
+
+  # ════════════════════════════════════════
+  # EXPLORE TAB
+  # ════════════════════════════════════════
+  navbarMenu("Explore", icon = icon("chart-bar"),
+
+    tabPanel("Univariate",
+      fluidRow(
+        column(4,selectInput("uni_var","Variable",choices=NULL)),
+        column(4,selectInput("uni_plot","Plot type",choices=c("Auto","Histogram","Density","Boxplot","Bar chart"))),
+        column(4,checkboxInput("uni_dropna","Drop NA",TRUE))
+      ),
+      fluidRow(
+        column(7, div(class="content-card", plotOutput("uni_plot_out",height=420))),
+        column(5, div(class="content-card", h4("Summary", style="color:#1B3D66;"), DTOutput("uni_summary")))
+      )
+    ),
+
+    tabPanel("Bivariate",
+      note_div(p(strong("Bivariate analysis")," \u2014 auto-detects variable types and suggests appropriate tests."), color="#6F42C1"),
+      fluidRow(
+        column(3,selectInput("bi_x","X variable",choices=NULL)),column(3,selectInput("bi_y","Y variable",choices=NULL)),
+        column(3,selectInput("bi_plot_type","Plot",choices=c("Auto","Scatter","Scatter+Linear","Scatter+Loess","Boxplot","Violin","Grouped bar"))),
+        column(3,selectInput("bi_test","Test",choices=c("Auto")))
+      ),
+      fluidRow(
+        column(7, div(class="content-card", plotOutput("bi_plot",height=440))),
+        column(5, div(class="content-card", h4("Test Results", style="color:#1B3D66;"), DTOutput("bi_test_tbl")))
+      ),
+      tags$hr(),
+      div(class="content-card",
+        h4("Correlation Matrix", style="color:#1B3D66;"),
+        fluidRow(column(3,selectInput("cor_method","Method",choices=c("pearson","spearman","kendall"))),column(9)),
+        fluidRow(column(7,plotOutput("cor_heatmap",height=500)),column(5,DTOutput("cor_table")))
+      )
+    ),
+
+    tabPanel("Categorical",
+      fluidRow(
+        column(4,selectInput("assoc_x","Row variable",choices=NULL)),
+        column(4,selectInput("assoc_y","Column variable",choices=NULL)),
+        column(4,selectInput("assoc_strata","Strata",choices=c("None"="")))
+      ),
+      fluidRow(
+        column(6, div(class="content-card", h4("Contingency Table"), DTOutput("assoc_tbl"))),
+        column(6, div(class="content-card", h4("Association Tests"), DTOutput("assoc_stats")))
+      ),
+      div(class="content-card", plotOutput("assoc_plot",height=420))
+    ),
+
+    tabPanel("Multivariate",
+      fluidRow(
+        column(4,selectInput("multi_method","Method",c("PCA","MCA","FAMD","K-means","PAM (Gower)"))),
+        column(2,numericInput("multi_k","Clusters",3,2,20)),
+        column(2,actionButton("run_multi","Run",class="btn-primary"))
+      ),
+      fluidRow(column(8, div(class="content-card", plotOutput("multi_plot",height=440))), column(4, div(class="content-card", DTOutput("multi_summary")))),
+      fluidRow(column(6, div(class="content-card", plotOutput("multi_scree",height=300))), column(6, div(class="content-card", plotOutput("multi_dendro",height=300))))
+    )
+  ),
+
+  # ════════════════════════════════════════
+  # TEST TAB
+  # ════════════════════════════════════════
+  tabPanel("Test", icon = icon("flask-vial"),
+    note_div(h4("Hypothesis Testing Suite"), p("20+ parametric and nonparametric tests with the Test Finder wizard."), color="#D63384"),
+    tabsetPanel(id="hyp_sub", type="pills",
+      tabPanel("Test Finder", br(),
+        div(class="content-card", style="max-width:650px;",
+          h4(style="color:#D63384;","Answer 3 questions to find the right test"),
+          fluidRow(
+            column(4,selectInput("finder_g","How many groups?",c("1"="1","2"="2","3+"="3"),"2")),
+            column(4,selectInput("finder_p","Paired?",c("Independent"="no","Paired"="yes"),"no")),
+            column(4,selectInput("finder_t","Data type?",c("Continuous"="continuous","Categorical"="categorical"),"continuous"))
+          ),
+          DTOutput("finder_tbl")
+        )
+      ),
+      tabPanel("Run Test", br(),
+        fluidRow(
+          column(3,selectInput("hyp_test","Test",c("One-sample t-test","Wilcoxon signed-rank","Sign test","Binomial test","Chi-square GOF","Welch t-test","Paired t-test","Mann-Whitney U","Wilcoxon paired","One-way ANOVA","Welch ANOVA","Kruskal-Wallis","Tukey HSD"),"Welch t-test")),
+          column(3,selectInput("hyp_v1","Variable 1",choices=NULL)),
+          column(3,selectInput("hyp_v2","Variable 2 / Group",choices=c("None"=""))),
+          column(3,numericInput("hyp_mu","H0 value",0))
         ),
+        fluidRow(column(3,numericInput("hyp_p0","H0 proportion",0.5,0,1,0.05)),column(3,actionButton("run_hyp","Run test",class="btn-primary",icon=icon("play"))),column(6)),
+        fluidRow(
+          column(7, div(class="content-card", DTOutput("hyp_result"))),
+          column(5, div(class="content-card", plotOutput("hyp_plot",height=340)))
+        )
+      ),
+      tabPanel("Normality", br(),
+        fluidRow(column(4,selectInput("norm_var","Variable",choices=NULL)),column(4,actionButton("run_norm","Run tests",class="btn-primary")),column(4)),
+        fluidRow(column(6, div(class="content-card", plotOutput("norm_qq",height=380))),column(6, div(class="content-card", plotOutput("norm_hist",height=380)))),
+        div(class="content-card", DTOutput("norm_tbl"))
+      ),
+      tabPanel("Power Analysis", br(),
+        fluidRow(column(4,selectInput("pwr_test","Test",c("Power: t-test"))),column(4,numericInput("pwr_alpha","Alpha",0.05,0.001,0.1,0.01)),column(4,actionButton("run_pwr","Calculate",class="btn-primary"))),
+        fluidRow(column(6, div(class="content-card", DTOutput("pwr_tbl"))),column(6, div(class="content-card", plotOutput("pwr_curve",height=360))))
+      )
+    )
+  ),
 
-        # ── DATA QUALITY ──
-        tabPanel("Data Quality", br(),
-          fluidRow(column(7,h4("Column profile"),DTOutput("col_prof_tbl")),column(5,h4("Missingness"),plotOutput("miss_plot",height=360))),
-          fluidRow(column(12,plotOutput("type_plot",height=280)))
+  # ════════════════════════════════════════
+  # MODEL TAB
+  # ════════════════════════════════════════
+  navbarMenu("Model", icon = icon("chart-line"),
+
+    tabPanel("Regression",
+      note_div(textOutput("model_guidance")),
+      fluidRow(
+        column(3,selectInput("mod_family","Family",c("Linear (Gaussian)","Binary logistic","Binary probit","Multinomial logistic","Ordinal logistic","Poisson","Negative binomial","Zero-inflated Poisson","Hurdle Poisson","Bias-reduced logistic"))),
+        column(3,selectInput("mod_outcome","Outcome",choices=NULL)),
+        column(4,selectizeInput("mod_preds","Predictors",choices=NULL,multiple=TRUE)),
+        column(2,numericInput("mod_poly","Poly degree",1,1,5))
+      ),
+      fluidRow(column(3,checkboxInput("mod_inter","Interactions",FALSE)),column(3,checkboxInput("mod_ordered","Ordered outcome",FALSE)),column(3,actionButton("fit_mod","Fit model",class="btn-primary",icon=icon("play"))),column(3,textOutput("mod_formula"))),
+      fluidRow(column(6, div(class="content-card", h4("Coefficients"), DTOutput("mod_coef"))), column(6, div(class="content-card", h4("Metrics"), DTOutput("mod_metrics")))),
+      div(class="content-card", plotOutput("mod_coef_plot",height=420)),
+      tags$hr(),
+      h4("Model Diagnostics", style="color:#1B3D66;"),
+      fluidRow(column(6, div(class="content-card", plotOutput("diag_resid",height=300))), column(6, div(class="content-card", plotOutput("diag_qq",height=300)))),
+      fluidRow(column(6, div(class="content-card", plotOutput("diag_scale",height=300))), column(6, div(class="content-card", DTOutput("diag_checks"))))
+    ),
+
+    tabPanel("Time Series",
+      note_div(h4(icon("chart-line"), " Time Series Analysis"), p("ARIMA, GARCH, stationarity tests, and forecasting."), color="#2C5A8F"),
+      fluidRow(
+        column(3,selectInput("ts_date","Date column",choices=NULL)),column(3,selectInput("ts_val","Value column",choices=NULL)),
+        column(2,selectInput("ts_freq","Frequency",c("Auto"="auto","Daily"="365","Weekly"="52","Monthly"="12","Quarterly"="4","Annual"="1"))),
+        column(2,checkboxInput("ts_returns","Log-returns",FALSE)),column(2,checkboxInput("ts_diff","Difference",FALSE))
+      ),
+      tabsetPanel(id="ts_sub",type="pills",
+        tabPanel("Visualization", br(),
+          div(class="content-card", plotOutput("ts_line",height=360)),
+          fluidRow(column(6,div(class="content-card",plotOutput("ts_acf",height=300))),column(6,div(class="content-card",plotOutput("ts_pacf",height=300)))),
+          div(class="content-card", plotOutput("ts_decomp",height=400))
         ),
-
-        # ── VARIABLE DOCTOR ──
-        tabPanel("Variable Doctor", icon=icon("stethoscope"), br(),
-          div(class="tab-note",style="border-left-color:#198754;",h4(style="margin-top:0;","Variable Doctor"),p("Intelligent diagnostics with one-click fixes.")),
-          fluidRow(column(3,uiOutput("doc_card_crit")),column(3,uiOutput("doc_card_warn")),column(3,uiOutput("doc_card_info")),column(3,uiOutput("doc_card_healthy"))),
-          fluidRow(column(12,
-            actionButton("doc_fix_all","Fix all critical",class="btn-danger",icon=icon("wrench")),
-            actionButton("doc_undo","Undo all",class="btn-outline-secondary",icon=icon("rotate-left")),
-            downloadButton("doc_report","Report (.csv)",class="btn-outline-primary")
-          )),br(),
-          fluidRow(column(12,DTOutput("doc_table"))),br(),
-          fluidRow(column(6,plotOutput("doc_health",height=300)),column(6,h4("Fix log"),uiOutput("doc_log")))
+        tabPanel("Stationarity", br(),
+          fluidRow(column(3,actionButton("run_station","Run tests",class="btn-primary")),column(9,note_div(p("ADF/PP: H\u2080 = unit root. KPSS: H\u2080 = stationary.")))),
+          div(class="content-card", DTOutput("station_tbl"), uiOutput("station_interp"))
         ),
-
-        # ── UNIVARIATE ──
-        tabPanel("Univariate", br(),
-          fluidRow(column(4,selectInput("uni_var","Variable",choices=NULL)),column(4,selectInput("uni_plot","Plot",choices=c("Auto","Histogram","Density","Boxplot","Bar chart"))),column(4,checkboxInput("uni_dropna","Drop NA",TRUE))),
-          fluidRow(column(7,plotOutput("uni_plot_out",height=420)),column(5,h4("Summary"),DTOutput("uni_summary")))
+        tabPanel("ARIMA", br(),
+          fluidRow(column(3,actionButton("fit_arima","Fit auto.arima",class="btn-primary")),column(3,numericInput("arima_h","Horizon",12,1,365)),column(6)),
+          fluidRow(column(6,div(class="content-card",verbatimTextOutput("arima_summary"))),column(6,div(class="content-card",DTOutput("arima_metrics")))),
+          div(class="content-card", plotOutput("arima_fc",height=400)),
+          fluidRow(column(6,div(class="content-card",plotOutput("arima_resid",height=300))),column(6,div(class="content-card",DTOutput("arima_ljung"))))
         ),
+        tabPanel("GARCH", br(),
+          note_div(p(strong("Volatility modeling.")," GARCH captures volatility clustering. Use log-returns for best results."), color="#DC3545"),
+          fluidRow(
+            column(3,selectInput("garch_type","Model",c("GARCH(1,1)"="sGARCH","GJR-GARCH"="gjrGARCH","EGARCH"="eGARCH"))),
+            column(2,numericInput("garch_p","p",1,1,3)),column(2,numericInput("garch_q","q",1,1,3)),
+            column(3,actionButton("fit_garch","Fit GARCH",class="btn-danger",icon=icon("fire"))),
+            column(2,numericInput("garch_h","Forecast h",20,1,100))
+          ),
+          div(class="content-card", verbatimTextOutput("garch_summary")),
+          fluidRow(column(6,div(class="content-card",plotOutput("garch_vol",height=350))),column(6,div(class="content-card",plotOutput("garch_resid",height=350)))),
+          fluidRow(column(6,div(class="content-card",plotOutput("garch_nic",height=300))),column(6,div(class="content-card",plotOutput("garch_fc",height=300)))),
+          div(class="content-card", DTOutput("garch_coef"))
+        )
+      )
+    ),
 
-        # ── BIVARIATE ──
-        tabPanel("Bivariate", icon=icon("arrows-left-right"), br(),
-          div(class="tab-note",style="border-left-color:#6f42c1;",p(strong("Bivariate analysis")," — auto-detects types and suggests tests.")),
-          fluidRow(column(3,selectInput("bi_x","X variable",choices=NULL)),column(3,selectInput("bi_y","Y variable",choices=NULL)),
-            column(3,selectInput("bi_plot_type","Plot",choices=c("Auto","Scatter","Scatter+Linear","Scatter+Loess","Boxplot","Violin","Grouped bar"))),
-            column(3,selectInput("bi_test","Test",choices=c("Auto")))),
-          fluidRow(column(7,plotOutput("bi_plot",height=440)),column(5,h4("Test results"),DTOutput("bi_test_tbl"))),
-          tags$hr(),h4("Correlation matrix"),
-          fluidRow(column(3,selectInput("cor_method","Method",choices=c("pearson","spearman","kendall"))),column(9)),
-          fluidRow(column(7,plotOutput("cor_heatmap",height=500)),column(5,DTOutput("cor_table")))
+    tabPanel("Survival",
+      note_div(h4(icon("heart-pulse"), " Survival Analysis"), p("Kaplan-Meier curves, Cox PH regression, and Schoenfeld tests."), color="#DC3545"),
+      fluidRow(column(3,selectInput("surv_time","Time",choices=NULL)),column(3,selectInput("surv_event","Event (0/1)",choices=NULL)),column(3,selectInput("surv_group","Group",choices=c("None"=""))),column(3,actionButton("run_km","Fit KM",class="btn-danger"))),
+      fluidRow(column(8,div(class="content-card",plotOutput("km_plot",height=440))),column(4,div(class="content-card",h4("Summary"),DTOutput("km_summary"),br(),DTOutput("km_logrank")))),
+      tags$hr(),h4("Cox PH Regression", style="color:#1B3D66;"),
+      fluidRow(column(5,selectizeInput("cox_preds","Predictors",choices=NULL,multiple=TRUE)),column(3,actionButton("run_cox","Fit Cox",class="btn-danger")),column(4)),
+      fluidRow(column(6,div(class="content-card",DTOutput("cox_coef"))),column(6,div(class="content-card",plotOutput("cox_forest",height=350)))),
+      fluidRow(column(6,div(class="content-card",DTOutput("cox_metrics"))),column(6,div(class="content-card",DTOutput("cox_ph"))))
+    ),
+
+    tabPanel("Machine Learning",
+      note_div(h4(icon("robot"), " ML Pipeline"), p("7 algorithms, auto-detect classification vs regression, model comparison dashboard."), color="#6F42C1"),
+      fluidRow(column(3,selectInput("ml_y","Outcome",choices=NULL)),column(4,selectizeInput("ml_x","Predictors",choices=NULL,multiple=TRUE)),column(2,sliderInput("ml_split","Train %",50,90,80,5)),column(3,uiOutput("ml_task_card"))),
+      fluidRow(
+        column(9,checkboxGroupInput("ml_methods","Models:",inline=TRUE,choices=c("Decision Tree","Random Forest","XGBoost","SVM","KNN","Naive Bayes","Logistic Reg."),selected=c("Decision Tree","Random Forest","XGBoost"))),
+        column(3,actionButton("ml_train","Train all",class="btn-primary btn-lg",icon=icon("play")))
+      ),
+      tabsetPanel(id="ml_sub",type="pills",
+        tabPanel("Compare", br(), div(class="content-card", DTOutput("ml_compare")), fluidRow(column(6,div(class="content-card",plotOutput("ml_bar",height=360))),column(6,div(class="content-card",plotOutput("ml_roc",height=360))))),
+        tabPanel("Importance", br(), fluidRow(column(4,selectInput("ml_imp_sel","Model",choices=NULL)),column(8,div(class="content-card",plotOutput("ml_imp",height=400))))),
+        tabPanel("Predictions", br(), fluidRow(column(4,selectInput("ml_pred_sel","Model",choices=NULL)),column(8,div(class="content-card",plotOutput("ml_pred_plot",height=400))))),
+        tabPanel("Confusion Matrix", br(), fluidRow(column(4,selectInput("ml_cm_sel","Model",choices=NULL)),column(4,div(class="content-card",plotOutput("ml_cm",height=350))),column(4,div(class="content-card",DTOutput("ml_cm_tbl"))))),
+        tabPanel("Tree", br(), div(class="content-card", plotOutput("ml_tree",height=500)))
+      )
+    ),
+
+    tabPanel("DOE",
+      div(class="content-card",
+        h4("Generate a Design", style="color:#1B3D66;"),
+        fluidRow(
+          column(3,selectInput("doe_type","Type",c("Full factorial","Fractional factorial (2-level)","Central composite","Box-Behnken","Latin hypercube","D-optimal"))),
+          column(2,numericInput("doe_k","Factors",3,2,12)),column(3,textInput("doe_names","Names","A, B, C")),
+          column(2,numericInput("doe_runs","Runs",12,4,200)),column(2,numericInput("doe_levels","Levels",2,2,5))
         ),
+        fluidRow(column(2,numericInput("doe_cp","Center pts",4,0,20)),column(2,checkboxInput("doe_rand","Randomize",TRUE)),column(2,actionButton("gen_doe","Generate",class="btn-primary")),column(6)),
+        fluidRow(column(7,DTOutput("doe_tbl")),column(5,plotOutput("doe_plot",height=320)))
+      ),
+      tags$hr(),
+      div(class="content-card",
+        h4("Analyze Existing DOE", style="color:#1B3D66;"),
+        fluidRow(column(3,selectInput("doe_resp","Response",choices=NULL)),column(5,selectizeInput("doe_factors","Factors",choices=NULL,multiple=TRUE)),column(2,checkboxInput("doe_ia","Interactions",TRUE)),column(2,actionButton("run_doe","Analyze",class="btn-primary"))),
+        fluidRow(column(6,DTOutput("doe_anova")),column(6,plotOutput("doe_effects",height=340)))
+      ),
+      downloadButton("download_design","DOE design (.csv)",class="btn-outline-primary btn-sm")
+    )
+  ),
 
-        # ── CATEGORICAL ASSOCIATION ──
-        tabPanel("Categorical", br(),
-          fluidRow(column(4,selectInput("assoc_x","Row",choices=NULL)),column(4,selectInput("assoc_y","Column",choices=NULL)),column(4,selectInput("assoc_strata","Strata",choices=c("None"="")))),
-          fluidRow(column(6,h4("Table"),DTOutput("assoc_tbl")),column(6,h4("Tests"),DTOutput("assoc_stats"))),
-          fluidRow(column(12,plotOutput("assoc_plot",height=420)))
+  # ════════════════════════════════════════
+  # OUTPUT TAB
+  # ════════════════════════════════════════
+  navbarMenu("Output", icon = icon("file-lines"),
+
+    tabPanel("Report",
+      note_div(h4(icon("file-lines"), " Professional Report Generator"), p("Generate polished Word (.docx) or HTML reports with customizable sections."), color="#198754"),
+      div(class="content-card",
+        fluidRow(
+          column(3, selectInput("rpt_fmt","Format",c("HTML"="html","Word (.docx)"="docx","Markdown"="md"))),
+          column(3, textInput("rpt_title","Title","Kernel Analysis Report")),
+          column(3, textInput("rpt_author","Author","")),
+          column(3, br(), downloadButton("gen_report","Generate Report",class="btn-success btn-lg",icon=icon("download")))
         ),
+        tags$hr(style="border-color:#C5D6EB;"),
+        h5("Include sections:", style="color:#1B3D66;"),
+        fluidRow(
+          column(2, checkboxInput("rpt_inc_summary","Data overview",TRUE)),
+          column(2, checkboxInput("rpt_inc_doctor","Variable Doctor",TRUE)),
+          column(2, checkboxInput("rpt_inc_profile","Column profile",TRUE)),
+          column(2, checkboxInput("rpt_inc_stats","Numeric stats",TRUE)),
+          column(2, checkboxInput("rpt_inc_plots","Distribution plots",TRUE)),
+          column(2, checkboxInput("rpt_inc_corr","Correlation matrix",TRUE))
+        )
+      ),
+      div(class="content-card", h4("Preview", style="color:#1B3D66;"), uiOutput("rpt_preview")),
+      div(class="content-card", h4("R Code Export", style="color:#1B3D66;"), verbatimTextOutput("code_export"), downloadButton("dl_code","Download .R",class="btn-outline-primary btn-sm"))
+    ),
 
-        # ── HYPOTHESIS TESTS ──
-        tabPanel("Hypothesis Tests", icon=icon("flask-vial"), br(),
-          div(class="tab-note",style="border-left-color:#d63384;",h4(style="margin-top:0;","Hypothesis Testing Suite")),
-          tabsetPanel(id="hyp_sub",type="pills",
-            tabPanel("Test Finder",br(),
-              div(style="background:#f8f0fc;border:1px solid #d63384;border-radius:10px;padding:20px;max-width:600px;",
-                h4(style="color:#d63384;margin-top:0;","Answer 3 questions"),
-                fluidRow(column(4,selectInput("finder_g","Groups?",c("1"="1","2"="2","3+"="3"),"2")),column(4,selectInput("finder_p","Paired?",c("Independent"="no","Paired"="yes"),"no")),column(4,selectInput("finder_t","Data?",c("Continuous"="continuous","Categorical"="categorical"),"continuous"))),
-                DTOutput("finder_tbl"))),
-            tabPanel("Run Test",br(),
-              fluidRow(column(3,selectInput("hyp_test","Test",c("One-sample t-test","Wilcoxon signed-rank","Sign test","Binomial test","Chi-square GOF","Welch t-test","Paired t-test","Mann-Whitney U","Wilcoxon paired","One-way ANOVA","Welch ANOVA","Kruskal-Wallis","Tukey HSD"),"Welch t-test")),
-                column(3,selectInput("hyp_v1","Variable 1",choices=NULL)),column(3,selectInput("hyp_v2","Variable 2",choices=c("None"=""))),column(3,numericInput("hyp_mu","H0 value",0))),
-              fluidRow(column(3,numericInput("hyp_p0","H0 proportion",0.5,0,1,0.05)),column(3,actionButton("run_hyp","Run test",class="btn-primary",icon=icon("play"))),column(6)),
-              fluidRow(column(7,DTOutput("hyp_result")),column(5,plotOutput("hyp_plot",height=340)))),
-            tabPanel("Normality",br(),
-              fluidRow(column(4,selectInput("norm_var","Variable",choices=NULL)),column(4,actionButton("run_norm","Run tests",class="btn-primary")),column(4)),
-              fluidRow(column(6,plotOutput("norm_qq",height=380)),column(6,plotOutput("norm_hist",height=380))),
-              DTOutput("norm_tbl")),
-            tabPanel("Power",br(),
-              fluidRow(column(4,selectInput("pwr_test","Test",c("Power: t-test"))),column(4,numericInput("pwr_alpha","Alpha",0.05,0.001,0.1,0.01)),column(4,actionButton("run_pwr","Calculate",class="btn-primary"))),
-              fluidRow(column(6,DTOutput("pwr_tbl")),column(6,plotOutput("pwr_curve",height=360))))
+    tabPanel("Templates",
+      note_div(h4(icon("swatchbook"), " Industry Templates"), p("Quality/SPC, RFM segmentation, Pareto, heatmaps, and volcano plots."), color="#14B8A6"),
+      tabsetPanel(id="tmpl_sub",type="pills",
+        tabPanel("Quality / SPC", br(),
+          div(class="content-card",
+            h4("Control Charts", style="color:#1B3D66;"),
+            fluidRow(column(3,selectInput("spc_var","Variable",choices=NULL)),column(2,selectInput("spc_type","Chart",c("Individuals"="individuals","X-bar"="xbar","P chart"="p","C chart"="c"))),column(2,numericInput("spc_n","Subgroup",5,2,25)),column(3,actionButton("run_spc","Generate",class="btn-primary")),column(2,uiOutput("spc_ooc"))),
+            plotOutput("spc_chart",height=400),DTOutput("spc_stats")
+          ),
+          div(class="content-card",
+            h4("Process Capability", style="color:#1B3D66;"),
+            fluidRow(column(3,selectInput("cap_var","Variable",choices=NULL)),column(2,numericInput("cap_lsl","LSL",NA)),column(2,numericInput("cap_usl","USL",NA)),column(3,actionButton("run_cap","Calculate",class="btn-primary"))),
+            fluidRow(column(6,plotOutput("cap_plot",height=350)),column(6,DTOutput("cap_tbl")))
           )
         ),
-
-        # ── REGRESSION ──
-        tabPanel("Regression", br(),
-          div(class="tab-note",textOutput("model_guidance")),
-          fluidRow(column(3,selectInput("mod_family","Family",c("Linear (Gaussian)","Binary logistic","Binary probit","Multinomial logistic","Ordinal logistic","Poisson","Negative binomial","Zero-inflated Poisson","Hurdle Poisson","Bias-reduced logistic"))),
-            column(3,selectInput("mod_outcome","Outcome",choices=NULL)),column(4,selectizeInput("mod_preds","Predictors",choices=NULL,multiple=TRUE)),column(2,numericInput("mod_poly","Poly degree",1,1,5))),
-          fluidRow(column(3,checkboxInput("mod_inter","Interactions",FALSE)),column(3,checkboxInput("mod_ordered","Ordered outcome",FALSE)),column(3,actionButton("fit_mod","Fit model",class="btn-primary")),column(3,textOutput("mod_formula"))),
-          fluidRow(column(6,h4("Coefficients"),DTOutput("mod_coef")),column(6,h4("Metrics"),DTOutput("mod_metrics"))),
-          fluidRow(column(12,plotOutput("mod_coef_plot",height=420))),
-          tags$hr(),h4("Model diagnostics"),
-          fluidRow(column(6,plotOutput("diag_resid",height=300)),column(6,plotOutput("diag_qq",height=300))),
-          fluidRow(column(6,plotOutput("diag_scale",height=300)),column(6,DTOutput("diag_checks")))
-        ),
-
-        # ── MULTIVARIATE ──
-        tabPanel("Multivariate", br(),
-          fluidRow(column(4,selectInput("multi_method","Method",c("PCA","MCA","FAMD","K-means","PAM (Gower)"))),column(2,numericInput("multi_k","Clusters",3,2,20)),column(2,actionButton("run_multi","Run",class="btn-primary"))),
-          fluidRow(column(8,plotOutput("multi_plot",height=440)),column(4,DTOutput("multi_summary"))),
-          fluidRow(column(6,plotOutput("multi_scree",height=300)),column(6,plotOutput("multi_dendro",height=300)))
-        ),
-
-        # ── TIME SERIES ──
-        tabPanel("Time Series", icon=icon("chart-line"), br(),
-          div(class="tab-note",style="border-left-color:#0d6efd;",h4(style="margin-top:0;","Time Series Analysis")),
-          fluidRow(column(3,selectInput("ts_date","Date column",choices=NULL)),column(3,selectInput("ts_val","Value column",choices=NULL)),
-            column(2,selectInput("ts_freq","Frequency",c("Auto"="auto","Daily"="365","Weekly"="52","Monthly"="12","Quarterly"="4","Annual"="1"))),
-            column(2,checkboxInput("ts_returns","Log-returns",FALSE)),column(2,checkboxInput("ts_diff","Difference",FALSE))),
-          tabsetPanel(id="ts_sub",type="pills",
-            tabPanel("Visualization",br(),plotOutput("ts_line",height=360),fluidRow(column(6,plotOutput("ts_acf",height=300)),column(6,plotOutput("ts_pacf",height=300))),plotOutput("ts_decomp",height=400)),
-            tabPanel("Stationarity",br(),fluidRow(column(3,actionButton("run_station","Run tests",class="btn-primary")),column(9,div(class="tab-note",p("ADF/PP: H0=unit root. KPSS: H0=stationary.")))),DTOutput("station_tbl"),uiOutput("station_interp")),
-            tabPanel("ARIMA",br(),fluidRow(column(3,actionButton("fit_arima","Fit auto.arima",class="btn-primary")),column(3,numericInput("arima_h","Horizon",12,1,365)),column(6)),
-              fluidRow(column(6,verbatimTextOutput("arima_summary")),column(6,DTOutput("arima_metrics"))),plotOutput("arima_fc",height=400),
-              fluidRow(column(6,plotOutput("arima_resid",height=300)),column(6,DTOutput("arima_ljung")))),
-            tabPanel("GARCH",br(),
-              div(class="tab-note",style="border-left-color:#dc3545;",p(strong("Volatility modeling.")," GARCH captures volatility clustering. Use log-returns.")),
-              fluidRow(column(3,selectInput("garch_type","Model",c("GARCH(1,1)"="sGARCH","GJR-GARCH"="gjrGARCH","EGARCH"="eGARCH"))),
-                column(2,numericInput("garch_p","p",1,1,3)),column(2,numericInput("garch_q","q",1,1,3)),column(3,actionButton("fit_garch","Fit GARCH",class="btn-danger",icon=icon("fire"))),column(2,numericInput("garch_h","Forecast h",20,1,100))),
-              verbatimTextOutput("garch_summary"),
-              fluidRow(column(6,plotOutput("garch_vol",height=350)),column(6,plotOutput("garch_resid",height=350))),
-              fluidRow(column(6,plotOutput("garch_nic",height=300)),column(6,plotOutput("garch_fc",height=300))),DTOutput("garch_coef"))
+        tabPanel("Business / RFM", br(),
+          div(class="content-card",
+            h4("RFM Segmentation", style="color:#1B3D66;"),
+            fluidRow(column(3,selectInput("rfm_cust","Customer ID",choices=NULL)),column(3,selectInput("rfm_date","Date",choices=NULL)),column(3,selectInput("rfm_amt","Amount",choices=NULL)),column(3,actionButton("run_rfm","Run RFM",class="btn-primary"))),
+            fluidRow(column(7,DTOutput("rfm_tbl")),column(5,plotOutput("rfm_seg",height=350))),
+            fluidRow(column(6,plotOutput("rfm_scatter",height=350)),column(6,plotOutput("rfm_heat",height=350)))
+          ),
+          div(class="content-card",
+            h4("Pareto Chart", style="color:#1B3D66;"),
+            fluidRow(column(4,selectInput("pareto_var","Category",choices=NULL)),column(4,actionButton("run_pareto","Generate",class="btn-primary"))),
+            plotOutput("pareto_plot",height=400)
           )
         ),
-
-        # ── SURVIVAL ──
-        tabPanel("Survival", icon=icon("heart-pulse"), br(),
-          div(class="tab-note",style="border-left-color:#dc3545;",h4(style="margin-top:0;","Survival Analysis")),
-          fluidRow(column(3,selectInput("surv_time","Time",choices=NULL)),column(3,selectInput("surv_event","Event (0/1)",choices=NULL)),column(3,selectInput("surv_group","Group",choices=c("None"=""))),column(3,actionButton("run_km","Fit KM",class="btn-danger"))),
-          fluidRow(column(8,plotOutput("km_plot",height=440)),column(4,h4("Summary"),DTOutput("km_summary"),br(),DTOutput("km_logrank"))),
-          tags$hr(),h4("Cox PH Regression"),
-          fluidRow(column(5,selectizeInput("cox_preds","Predictors",choices=NULL,multiple=TRUE)),column(3,actionButton("run_cox","Fit Cox",class="btn-danger")),column(4)),
-          fluidRow(column(6,DTOutput("cox_coef")),column(6,plotOutput("cox_forest",height=350))),
-          fluidRow(column(6,DTOutput("cox_metrics")),column(6,DTOutput("cox_ph")))
-        ),
-
-        # ── ML PIPELINE ──
-        tabPanel("Machine Learning", icon=icon("robot"), br(),
-          div(class="tab-note",style="border-left-color:#6f42c1;",h4(style="margin-top:0;","ML Pipeline")),
-          fluidRow(column(3,selectInput("ml_y","Outcome",choices=NULL)),column(4,selectizeInput("ml_x","Predictors",choices=NULL,multiple=TRUE)),column(2,sliderInput("ml_split","Train%",50,90,80,5)),column(3,uiOutput("ml_task_card"))),
-          fluidRow(column(9,checkboxGroupInput("ml_methods","Models:",inline=TRUE,choices=c("Decision Tree","Random Forest","XGBoost","SVM","KNN","Naive Bayes","Logistic Reg."),selected=c("Decision Tree","Random Forest","XGBoost"))),
-            column(3,actionButton("ml_train","Train all",class="btn-primary btn-lg",icon=icon("play")))),
-          tabsetPanel(id="ml_sub",type="pills",
-            tabPanel("Compare",br(),DTOutput("ml_compare"),fluidRow(column(6,plotOutput("ml_bar",height=360)),column(6,plotOutput("ml_roc",height=360)))),
-            tabPanel("Importance",br(),fluidRow(column(4,selectInput("ml_imp_sel","Model",choices=NULL)),column(8,plotOutput("ml_imp",height=400)))),
-            tabPanel("Predictions",br(),fluidRow(column(4,selectInput("ml_pred_sel","Model",choices=NULL)),column(8,plotOutput("ml_pred_plot",height=400)))),
-            tabPanel("Confusion Matrix",br(),fluidRow(column(4,selectInput("ml_cm_sel","Model",choices=NULL)),column(4,plotOutput("ml_cm",height=350)),column(4,DTOutput("ml_cm_tbl")))),
-            tabPanel("Tree",br(),plotOutput("ml_tree",height=500))
+        tabPanel("Healthcare", br(),
+          div(class="content-card",
+            h4("Heatmap", style="color:#1B3D66;"),
+            fluidRow(column(4,selectizeInput("heat_vars","Variables",choices=NULL,multiple=TRUE)),column(2,selectInput("heat_scale","Scale",c("None"="none","Row"="row","Column"="column"))),column(3,actionButton("run_heat","Generate",class="btn-primary"))),
+            plotOutput("tmpl_heatmap",height=550)
+          ),
+          div(class="content-card",
+            h4("Volcano Plot", style="color:#1B3D66;"),
+            fluidRow(column(3,selectInput("volc_fc","Fold-change col",choices=NULL)),column(3,selectInput("volc_p","P-value col",choices=NULL)),column(2,numericInput("volc_fc_t","FC thresh",1,0,5,0.5)),column(2,numericInput("volc_p_t","P thresh",0.05,0.001,0.1,0.01)),column(2,actionButton("run_volc","Plot",class="btn-primary"))),
+            plotOutput("volc_plot",height=450)
           )
-        ),
+        )
+      )
+    ),
 
-        # ── DOE ──
-        tabPanel("DOE", br(),
-          h4("Generate a design"),
-          fluidRow(column(3,selectInput("doe_type","Type",c("Full factorial","Fractional factorial (2-level)","Central composite","Box-Behnken","Latin hypercube","D-optimal"))),
-            column(2,numericInput("doe_k","Factors",3,2,12)),column(3,textInput("doe_names","Names","A, B, C")),column(2,numericInput("doe_runs","Runs",12,4,200)),column(2,numericInput("doe_levels","Levels",2,2,5))),
-          fluidRow(column(2,numericInput("doe_cp","Center pts",4,0,20)),column(2,checkboxInput("doe_rand","Randomize",TRUE)),column(2,actionButton("gen_doe","Generate",class="btn-primary"))),
-          fluidRow(column(7,DTOutput("doe_tbl")),column(5,plotOutput("doe_plot",height=320))),
-          tags$hr(),h4("Analyze existing DOE"),
-          fluidRow(column(3,selectInput("doe_resp","Response",choices=NULL)),column(5,selectizeInput("doe_factors","Factors",choices=NULL,multiple=TRUE)),column(2,checkboxInput("doe_ia","Interactions",TRUE)),column(2,actionButton("run_doe","Analyze",class="btn-primary"))),
-          fluidRow(column(6,DTOutput("doe_anova")),column(6,plotOutput("doe_effects",height=340)))
-        ),
+    tabPanel("Methods Catalog",
+      note_div(p("Registry of 132 statistical methods mapped to R packages and use cases.")),
+      div(class="content-card", DTOutput("methods_tbl")),
+      downloadButton("download_methods","Download catalog (.csv)",class="btn-outline-primary btn-sm")
+    )
+  ),
 
-        # ── REPORT ──
-        tabPanel("Report", icon=icon("file-lines"), br(),
-          div(class="tab-note",style="border-left-color:#198754;",h4(style="margin-top:0;","Report Generator")),
-          fluidRow(column(3,selectInput("rpt_fmt","Format",c("HTML"="html","Markdown"="md"))),column(3,textInput("rpt_title","Title","Kernel Report")),column(3,textInput("rpt_author","Author","")),column(3,downloadButton("gen_report","Download Report",class="btn-success"))),
-          tags$hr(),h4("Preview"),uiOutput("rpt_preview"),
-          tags$hr(),h4("R Code Export"),verbatimTextOutput("code_export"),downloadButton("dl_code","Download .R",class="btn-outline-primary")
-        ),
-
-        # ── TEMPLATES ──
-        tabPanel("Templates", icon=icon("swatchbook"), br(),
-          div(class="tab-note",style="border-left-color:#20c997;",h4(style="margin-top:0;","Industry Templates")),
-          tabsetPanel(id="tmpl_sub",type="pills",
-            tabPanel("Quality/SPC",br(),h4("Control Charts"),
-              fluidRow(column(3,selectInput("spc_var","Variable",choices=NULL)),column(2,selectInput("spc_type","Chart",c("Individuals"="individuals","X-bar"="xbar","P chart"="p","C chart"="c"))),column(2,numericInput("spc_n","Subgroup",5,2,25)),column(3,actionButton("run_spc","Generate",class="btn-primary")),column(2,uiOutput("spc_ooc"))),
-              plotOutput("spc_chart",height=400),DTOutput("spc_stats"),
-              tags$hr(),h4("Process Capability"),
-              fluidRow(column(3,selectInput("cap_var","Variable",choices=NULL)),column(2,numericInput("cap_lsl","LSL",NA)),column(2,numericInput("cap_usl","USL",NA)),column(3,actionButton("run_cap","Calculate",class="btn-primary"))),
-              fluidRow(column(6,plotOutput("cap_plot",height=350)),column(6,DTOutput("cap_tbl")))),
-            tabPanel("Business/RFM",br(),h4("RFM Segmentation"),
-              fluidRow(column(3,selectInput("rfm_cust","Customer ID",choices=NULL)),column(3,selectInput("rfm_date","Date",choices=NULL)),column(3,selectInput("rfm_amt","Amount",choices=NULL)),column(3,actionButton("run_rfm","Run RFM",class="btn-primary"))),
-              fluidRow(column(7,DTOutput("rfm_tbl")),column(5,plotOutput("rfm_seg",height=350))),
-              fluidRow(column(6,plotOutput("rfm_scatter",height=350)),column(6,plotOutput("rfm_heat",height=350))),
-              tags$hr(),h4("Pareto Chart"),
-              fluidRow(column(4,selectInput("pareto_var","Category",choices=NULL)),column(4,actionButton("run_pareto","Generate",class="btn-primary"))),
-              plotOutput("pareto_plot",height=400)),
-            tabPanel("Healthcare",br(),h4("Heatmap"),
-              fluidRow(column(4,selectizeInput("heat_vars","Variables",choices=NULL,multiple=TRUE)),column(2,selectInput("heat_scale","Scale",c("None"="none","Row"="row","Column"="column"))),column(3,actionButton("run_heat","Generate",class="btn-primary"))),
-              plotOutput("tmpl_heatmap",height=550),
-              tags$hr(),h4("Volcano Plot"),
-              fluidRow(column(3,selectInput("volc_fc","Fold-change",choices=NULL)),column(3,selectInput("volc_p","P-value",choices=NULL)),column(2,numericInput("volc_fc_t","FC thresh",1,0,5,0.5)),column(2,numericInput("volc_p_t","P thresh",0.05,0.001,0.1,0.01)),column(2,actionButton("run_volc","Plot",class="btn-primary"))),
-              plotOutput("volc_plot",height=450)),
-            tabPanel("Sample Data",br(),
-              fluidRow(column(4,selectInput("sample_ds","Dataset",c("mtcars","iris","airquality","ToothGrowth","PlantGrowth","ChickWeight","USArrests","faithful","swiss","sleep","chickwts","InsectSprays","warpbreaks"))),column(3,actionButton("load_sample","Load",class="btn-success",icon=icon("download"))),column(5,uiOutput("sample_info"))))
-          )
-        ),
-
-        # ── METHODS CATALOG ──
-        tabPanel("Methods Catalog", br(),
-          div(class="tab-note","Registry of 132 methods mapped to R packages."),DTOutput("methods_tbl"))
-
-      ) # end tabsetPanel
-    ) # end mainPanel
-  ) # end sidebarLayout
-) # end fluidPage
+  # ════════════════════════════════════════
+  # ABOUT (replaces package status on Overview)
+  # ════════════════════════════════════════
+  tabPanel("About", icon = icon("circle-info"),
+    div(style="max-width:800px; margin:auto;",
+      div(class="content-card",
+        h3(HTML("&#127793; Kernel"), style="color:#1B3D66;"),
+        p(strong("The core of your analysis."), " Free, open-source statistical analysis platform."),
+        p("Built by ", a("Anjana Yatawara, Ph.D.", href="https://www.yatawara.com", target="_blank"),
+          " \u2014 Assistant Professor of Mathematics & Statistics, California State University, Bakersfield."),
+        tags$hr(style="border-color:#C5D6EB;"),
+        h5("Package Status", style="color:#1B3D66;"),
+        DTOutput("pkg_tbl"),
+        tags$hr(style="border-color:#C5D6EB;"),
+        p(style="color:#7A99B8; font-size:0.85rem;", "Kernel is MIT licensed. Visit ", a("kernelstats.com", href="https://kernelstats.com", target="_blank"), " or ", a("GitHub", href="https://github.com/anjana-yatawara/kernel", target="_blank"), ".")
+      )
+    )
+  )
+) # end navbarPage / ui
 
 # ══════════════════════════════════════════════════════════════
 # SERVER
@@ -760,7 +1038,7 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
 
-  # ── Data import ──
+  # ── Data import (file) ──
   raw_data <- reactive({
     req(input$file)
     ext <- tolower(tools::file_ext(input$file$name))
@@ -769,8 +1047,42 @@ server <- function(input, output, session) {
     tryCatch(import_data(input$file$datapath, input$file$name, sheet=sheet, object_name=obj_nm), error=function(e){showNotification(paste("Import error:",e$message),type="error");NULL})
   })
 
+  # ── Data import (paste) ──
+  paste_data <- eventReactive(input$load_paste, {
+    txt <- input$paste_data
+    req(nzchar(trimws(txt)))
+    tryCatch({
+      con <- textConnection(txt)
+      on.exit(close(con))
+      # Detect delimiter
+      first_line <- readLines(textConnection(txt), n = 1)
+      delim <- if (grepl("\t", first_line)) "\t" else ","
+      as.data.frame(readr::read_delim(textConnection(txt), delim = delim, show_col_types = FALSE))
+    }, error = function(e) { showNotification(paste("Parse error:", e$message), type = "error"); NULL })
+  })
+
+  # ── Data import (URL) ──
+  url_data <- eventReactive(input$load_url, {
+    url <- trimws(input$url_input)
+    req(nzchar(url))
+    tryCatch({
+      ext <- tolower(tools::file_ext(url))
+      if (ext %in% c("xlsx", "xls")) {
+        tmp <- tempfile(fileext = paste0(".", ext))
+        download.file(url, tmp, mode = "wb", quiet = TRUE)
+        as.data.frame(readxl::read_excel(tmp))
+      } else {
+        as.data.frame(readr::read_csv(url, show_col_types = FALSE, progress = FALSE))
+      }
+    }, error = function(e) { showNotification(paste("URL error:", e$message), type = "error"); NULL })
+  })
+
   analysis_data <- reactive({
-    df <- raw_data(); req(df)
+    # Priority: file > paste > url
+    df <- raw_data()
+    if (is.null(df)) df <- tryCatch(paste_data(), error = function(e) NULL)
+    if (is.null(df)) df <- tryCatch(url_data(), error = function(e) NULL)
+    req(df)
     tryCatch(prep_data(df, clean_names=isTRUE(input$clean_names), drop_empty=isTRUE(input$drop_empty)), error=function(e){showNotification(e$message,type="error");NULL})
   })
 
@@ -827,26 +1139,26 @@ server <- function(input, output, session) {
   output$card_cols <- renderUI({ df<-doctor_data(); v<-if(is.null(df))"-" else ncol(df); div(class="stat-card",div(class="label","Columns"),div(class="value",v)) })
   output$card_numeric <- renderUI({ df<-doctor_data(); v<-if(is.null(df))"-" else length(numeric_vars_of(df)); div(class="stat-card",div(class="label","Numeric"),div(class="value",v)) })
   output$card_categorical <- renderUI({ df<-doctor_data(); v<-if(is.null(df))"-" else length(categorical_vars_of(df)); div(class="stat-card",div(class="label","Categorical"),div(class="value",v)) })
-  output$insight_notes <- renderUI({ df<-doctor_data(); if(is.null(df)) return(tags$p("Upload data.")); tags$p(paste0("Rows: ",nrow(df)," | Cols: ",ncol(df)," | Missing: ",sum(is.na(df)))) })
+  output$insight_notes <- renderUI({ df<-doctor_data(); if(is.null(df)) return(tags$p("Import data using the sidebar to get started.")); tags$p(paste0(format(nrow(df),big.mark=",")," rows \u00D7 ",ncol(df)," columns \u2022 ",sum(is.na(df))," missing values \u2022 ",length(numeric_vars_of(df))," numeric, ",length(categorical_vars_of(df))," categorical")) })
   output$data_preview <- renderDT({ df<-doctor_data();req(df);datatable(df,options=list(pageLength=10,scrollX=TRUE),filter="top") })
   output$pkg_tbl <- renderDT({ datatable(package_status(),options=list(dom="tip",pageLength=15,scrollX=TRUE),rownames=FALSE) })
 
   # ── Data Quality ──
   output$col_prof_tbl <- renderDT({ df<-doctor_data();req(df);datatable(column_profile(df),options=list(pageLength=10,scrollX=TRUE),rownames=FALSE) })
-  output$miss_plot <- renderPlot({ df<-doctor_data();req(df);prof<-column_profile(df); ggplot(prof,aes(x=reorder(variable,missing_pct),y=missing_pct))+geom_col()+coord_flip()+labs(x=NULL,y="Missing %")+scale_y_continuous(labels=label_percent(scale=1))+theme_minimal(base_size=12) })
-  output$type_plot <- renderPlot({ df<-doctor_data();req(df);prof<-column_profile(df);tc<-prof|>count(type,sort=TRUE); ggplot(tc,aes(x=reorder(type,n),y=n))+geom_col()+coord_flip()+labs(x=NULL,y="Count")+theme_minimal(base_size=12) })
+  output$miss_plot <- renderPlot({ df<-doctor_data();req(df);prof<-column_profile(df); ggplot(prof,aes(x=reorder(variable,missing_pct),y=missing_pct))+geom_col(fill="#2C5A8F",alpha=0.8)+coord_flip()+labs(x=NULL,y="Missing %")+scale_y_continuous(labels=label_percent(scale=1))+theme_kernel() })
+  output$type_plot <- renderPlot({ df<-doctor_data();req(df);prof<-column_profile(df);tc<-prof|>count(type,sort=TRUE); ggplot(tc,aes(x=reorder(type,n),y=n))+geom_col(fill="#2C5A8F",alpha=0.8)+coord_flip()+labs(x=NULL,y="Count",title="Variable Types")+theme_kernel() })
 
   # ── Variable Doctor ──
-  output$doc_card_crit <- renderUI({ f<-doc_findings();n<-sum(f$severity=="critical");cl<-if(n>0)"#dc3545" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Critical"),div(class="value",style=paste0("color:",cl,";"),n)) })
-  output$doc_card_warn <- renderUI({ f<-doc_findings();n<-sum(f$severity=="warning");cl<-if(n>0)"#fd7e14" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Warnings"),div(class="value",style=paste0("color:",cl,";"),n)) })
-  output$doc_card_info <- renderUI({ f<-doc_findings();n<-sum(f$severity=="info"); div(class="stat-card",style="border-left:4px solid #0d6efd;",div(class="label","Info"),div(class="value",style="color:#0d6efd;",n)) })
+  output$doc_card_crit <- renderUI({ f<-doc_findings();n<-sum(f$severity=="critical");cl<-if(n>0)"#DC3545" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Critical"),div(class="value",style=paste0("color:",cl,";"),n)) })
+  output$doc_card_warn <- renderUI({ f<-doc_findings();n<-sum(f$severity=="warning");cl<-if(n>0)"#FD7E14" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Warnings"),div(class="value",style=paste0("color:",cl,";"),n)) })
+  output$doc_card_info <- renderUI({ f<-doc_findings();n<-sum(f$severity=="info"); div(class="stat-card",style="border-left:4px solid #2C5A8F;",div(class="label","Info"),div(class="value",style="color:#2C5A8F;",n)) })
   output$doc_card_healthy <- renderUI({ df<-doctor_data();f<-doc_findings();req(df); div(class="stat-card",style="border-left:4px solid #198754;",div(class="label","Healthy"),div(class="value",style="color:#198754;",ncol(df)-length(unique(f$variable)))) })
 
   output$doc_table <- renderDT({
     f <- doc_findings()
     if (nrow(f)==0) return(datatable(data.frame(Message="All columns healthy!"),options=list(dom="t"),rownames=FALSE))
     dd <- f[,c("variable","severity","issue","detail"),drop=FALSE]
-    dd$severity <- ifelse(f$severity=="critical",'<span style="color:#dc3545;font-weight:700;">CRITICAL</span>',ifelse(f$severity=="warning",'<span style="color:#fd7e14;font-weight:700;">WARNING</span>','<span style="color:#0d6efd;">INFO</span>'))
+    dd$severity <- ifelse(f$severity=="critical",'<span style="color:#DC3545;font-weight:700;">CRITICAL</span>',ifelse(f$severity=="warning",'<span style="color:#FD7E14;font-weight:700;">WARNING</span>','<span style="color:#2C5A8F;">INFO</span>'))
     dd$action <- ifelse(f$fix_action!="none",
       paste0('<button class="btn btn-sm btn-outline-primary" onclick="Shiny.setInputValue(&quot;doc_fix_one&quot;,&quot;',f$fix_id,'&quot;,{priority:&quot;event&quot;})" style="font-size:0.75rem;padding:2px 8px;">',sapply(f$fix_action,icon_for_fix),'</button>'),
       '<span style="color:#999;">Review</span>')
@@ -857,27 +1169,27 @@ server <- function(input, output, session) {
     df<-doctor_data();f<-doc_findings();req(df);av<-data.frame(variable=names(df),stringsAsFactors=FALSE)
     if(nrow(f)>0){worst<-f|>mutate(sr=case_when(severity=="critical"~1,severity=="warning"~2,TRUE~3))|>group_by(variable)|>summarise(ws=severity[which.min(sr)],.groups="drop");av<-av|>left_join(worst,by="variable")|>mutate(status=ifelse(is.na(ws),"healthy",ws))} else av$status<-"healthy"
     av$status<-factor(av$status,levels=c("critical","warning","info","healthy"),labels=c("Critical","Warning","Info","Healthy"))
-    ggplot(av,aes(x=reorder(variable,as.numeric(status)),fill=status))+geom_bar(width=0.7)+coord_flip()+scale_fill_manual(values=c("Critical"="#dc3545","Warning"="#fd7e14","Info"="#0d6efd","Healthy"="#198754"),drop=FALSE)+labs(x=NULL,y=NULL,fill="Status")+theme_minimal(base_size=12)+theme(legend.position="bottom",axis.text.x=element_blank(),panel.grid=element_blank())
+    ggplot(av,aes(x=reorder(variable,as.numeric(status)),fill=status))+geom_bar(width=0.7)+coord_flip()+scale_fill_manual(values=c("Critical"="#DC3545","Warning"="#FD7E14","Info"="#2C5A8F","Healthy"="#198754"),drop=FALSE)+labs(x=NULL,y=NULL,fill="Status",title="Column Health")+theme_kernel()+theme(axis.text.x=element_blank(),panel.grid=element_blank())
   })
-  output$doc_log <- renderUI({ lg<-doc$fix_log; if(!length(lg)) return(tags$p(class="text-muted","No fixes yet.")); tags$ul(style="font-size:0.85rem;",lapply(rev(lg),tags$li)) })
+  output$doc_log <- renderUI({ lg<-doc$fix_log; if(!length(lg)) return(tags$p(class="text-muted","No fixes applied yet.")); tags$ul(style="font-size:0.85rem;",lapply(rev(lg),tags$li)) })
 
   observeEvent(input$doc_fix_one, { fid<-input$doc_fix_one;f<-doc_findings();row<-f[f$fix_id==fid,,drop=FALSE]; if(nrow(row)==0)return(); r<-apply_fix(doc$current,row$variable[1],row$fix_action[1]); if(!is.null(r$data)){doc$current<-r$data;doc$fix_count<-doc$fix_count+1;doc$fix_log<-c(doc$fix_log,r$message);showNotification(r$message,type="message",duration=3)} })
   observeEvent(input$doc_fix_all, { f<-doc_findings();cr<-f[f$severity=="critical"&f$fix_action!="none",,drop=FALSE]; if(nrow(cr)==0){showNotification("No critical fixes.",type="warning");return()}; df<-doc$current;fc<-0; for(i in seq_len(nrow(cr))){if(cr$variable[i]%in%names(df)){r<-apply_fix(df,cr$variable[i],cr$fix_action[i]);if(!is.null(r$data)){df<-r$data;doc$fix_log<-c(doc$fix_log,r$message);fc<-fc+1}}}; doc$current<-df;doc$fix_count<-doc$fix_count+fc;showNotification(paste0(fc," fixes applied."),type="message") })
-  observeEvent(input$doc_undo, { if(!is.null(doc$original)){doc$current<-doc$original;doc$fix_log<-c(doc$fix_log,paste0("UNDO: Reverted ",doc$fix_count," fixes."));doc$fix_count<-0;showNotification("Reverted.",type="warning")} })
+  observeEvent(input$doc_undo, { if(!is.null(doc$original)){doc$current<-doc$original;doc$fix_log<-c(doc$fix_log,paste0("UNDO: Reverted ",doc$fix_count," fixes."));doc$fix_count<-0;showNotification("Reverted to original data.",type="warning")} })
   output$doc_report <- downloadHandler(filename=function()paste0("doctor_",Sys.Date(),".csv"),content=function(file){f<-doc_findings();readr::write_csv(f[,c("variable","severity","issue","detail")],file)})
 
   # ── Univariate ──
   output$uni_plot_out <- renderPlot({
     df<-doctor_data();req(df,input$uni_var);var<-input$uni_var;x<-df[[var]]; if(isTRUE(input$uni_dropna)){df<-df[!is.na(df[[var]]),,drop=FALSE];x<-df[[var]]}; validate(need(length(x)>0,"No data."))
     chosen<-input$uni_plot; if(chosen=="Auto") chosen<-if(is.numeric(x))"Histogram" else "Bar chart"
-    if(chosen=="Histogram"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(x=.data[[var]]))+geom_histogram(bins=30,color="white")+labs(title=paste("Histogram:",var))+theme_minimal(base_size=12)}
-    else if(chosen=="Density"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(x=.data[[var]]))+geom_density(alpha=0.6)+labs(title=paste("Density:",var))+theme_minimal(base_size=12)}
-    else if(chosen=="Boxplot"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(y=.data[[var]],x=""))+geom_boxplot()+labs(title=paste("Boxplot:",var))+theme_minimal(base_size=12)}
-    else { ggplot(data.frame(v=coerce_categorical(x)),aes(x=v))+geom_bar()+coord_flip()+labs(title=paste("Bar:",var))+theme_minimal(base_size=12)}
+    if(chosen=="Histogram"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(x=.data[[var]]))+geom_histogram(bins=30,fill="#2C5A8F",alpha=0.7,color="white")+labs(title=paste("Histogram:",var))+theme_kernel()}
+    else if(chosen=="Density"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(x=.data[[var]]))+geom_density(fill="#2C5A8F",alpha=0.3,color="#2C5A8F",linewidth=1)+labs(title=paste("Density:",var))+theme_kernel()}
+    else if(chosen=="Boxplot"){validate(need(is.numeric(x),"Need numeric.")); ggplot(df,aes(y=.data[[var]],x=""))+geom_boxplot(fill="#2C5A8F",alpha=0.3,color="#2C5A8F")+labs(title=paste("Boxplot:",var))+theme_kernel()}
+    else { ggplot(data.frame(v=coerce_categorical(x)),aes(x=v))+geom_bar(fill="#2C5A8F",alpha=0.8)+coord_flip()+labs(title=paste("Bar:",var))+theme_kernel()}
   })
   output$uni_summary <- renderDT({
     df<-doctor_data();req(df,input$uni_var);x<-df[[input$uni_var]]
-    if(is.numeric(x)) out<-data.frame(stat=c("n","missing","mean","sd","min","median","max"),value=c(sum(!is.na(x)),sum(is.na(x)),mean(x,na.rm=T),sd(x,na.rm=T),min(x,na.rm=T),median(x,na.rm=T),max(x,na.rm=T)))
+    if(is.numeric(x)) out<-data.frame(stat=c("n","missing","mean","sd","min","median","max"),value=round(c(sum(!is.na(x)),sum(is.na(x)),mean(x,na.rm=T),sd(x,na.rm=T),min(x,na.rm=T),median(x,na.rm=T),max(x,na.rm=T)),4))
     else {tab<-sort(table(coerce_categorical(x),useNA="ifany"),decreasing=TRUE); out<-data.frame(level=names(tab),count=as.integer(tab),prop=round(as.numeric(tab)/sum(tab),3))}
     datatable(out,options=list(dom="tip",pageLength=10),rownames=FALSE)
   })
@@ -886,10 +1198,10 @@ server <- function(input, output, session) {
   output$bi_plot <- renderPlot({
     df<-doctor_data();req(df,input$bi_x,input$bi_y);xv<-input$bi_x;yv<-input$bi_y;pd<-df[complete.cases(df[[xv]],df[[yv]]),,drop=FALSE];validate(need(nrow(pd)>=3,"Not enough data."))
     xn<-is.numeric(pd[[xv]]);yn<-is.numeric(pd[[yv]]);pt<-input$bi_plot_type
-    if(xn&&yn){p<-ggplot(pd,aes(x=.data[[xv]],y=.data[[yv]]))+geom_point(alpha=0.5,color="#6f42c1"); if(pt%in%c("Auto","Scatter+Linear"))p<-p+geom_smooth(method="lm",se=TRUE,color="#dc3545"); if(pt=="Scatter+Loess")p<-p+geom_smooth(method="loess",se=TRUE,color="#0d6efd"); p+labs(title=paste(yv,"vs.",xv))+theme_minimal(base_size=13)}
-    else if((!xn&&yn)||(xn&&!yn)){cv<-if(!xn)xv else yv;nv<-if(xn)xv else yv;pd[[cv]]<-factor(pd[[cv]]); if(pt%in%c("Auto","Boxplot"))ggplot(pd,aes(x=.data[[cv]],y=.data[[nv]],fill=.data[[cv]]))+geom_boxplot(alpha=0.7,show.legend=FALSE)+stat_summary(fun=mean,geom="point",shape=18,size=3,color="#dc3545")+labs(title=paste(nv,"by",cv))+theme_minimal(base_size=13)+theme(axis.text.x=element_text(angle=45,hjust=1))
-    else ggplot(pd,aes(x=.data[[cv]],y=.data[[nv]],fill=.data[[cv]]))+geom_violin(alpha=0.6,show.legend=FALSE)+geom_boxplot(width=0.15,fill="white")+labs(title=paste(nv,"by",cv))+theme_minimal(base_size=13)}
-    else {pd[[xv]]<-factor(pd[[xv]]);pd[[yv]]<-factor(pd[[yv]]); ggplot(pd,aes(x=.data[[xv]],fill=.data[[yv]]))+geom_bar(position="dodge")+labs(title=paste(yv,"by",xv))+theme_minimal(base_size=13)}
+    if(xn&&yn){p<-ggplot(pd,aes(x=.data[[xv]],y=.data[[yv]]))+geom_point(alpha=0.5,color="#6F42C1"); if(pt%in%c("Auto","Scatter+Linear"))p<-p+geom_smooth(method="lm",se=TRUE,color="#DC3545"); if(pt=="Scatter+Loess")p<-p+geom_smooth(method="loess",se=TRUE,color="#2C5A8F"); p+labs(title=paste(yv,"vs.",xv))+theme_kernel()}
+    else if((!xn&&yn)||(xn&&!yn)){cv<-if(!xn)xv else yv;nv<-if(xn)xv else yv;pd[[cv]]<-factor(pd[[cv]]); if(pt%in%c("Auto","Boxplot"))ggplot(pd,aes(x=.data[[cv]],y=.data[[nv]],fill=.data[[cv]]))+geom_boxplot(alpha=0.7,show.legend=FALSE)+stat_summary(fun=mean,geom="point",shape=18,size=3,color="#DC3545")+labs(title=paste(nv,"by",cv))+theme_kernel()+theme(axis.text.x=element_text(angle=45,hjust=1))
+    else ggplot(pd,aes(x=.data[[cv]],y=.data[[nv]],fill=.data[[cv]]))+geom_violin(alpha=0.6,show.legend=FALSE)+geom_boxplot(width=0.15,fill="white")+labs(title=paste(nv,"by",cv))+theme_kernel()}
+    else {pd[[xv]]<-factor(pd[[xv]]);pd[[yv]]<-factor(pd[[yv]]); ggplot(pd,aes(x=.data[[xv]],fill=.data[[yv]]))+geom_bar(position="dodge")+labs(title=paste(yv,"by",xv))+theme_kernel()}
   })
   output$bi_test_tbl <- renderDT({
     df<-doctor_data();req(df,input$bi_x,input$bi_y);xv<-input$bi_x;yv<-input$bi_y;xn<-is.numeric(df[[xv]]);yn<-is.numeric(df[[yv]])
@@ -902,7 +1214,7 @@ server <- function(input, output, session) {
   })
   output$cor_heatmap <- renderPlot({
     df<-doctor_data();req(df);cm<-compute_cor_matrix(df,input$cor_method%||%"pearson");validate(need(!is.null(cm),"Need 2+ numeric vars."))
-    cl<-reshape_cor(cm$cor,cm$pval); ggplot(cl,aes(x=Var1,y=Var2,fill=value))+geom_tile(color="white",linewidth=0.5)+geom_text(aes(label=label),size=3.2)+scale_fill_gradient2(low="#2166AC",mid="white",high="#B2182B",midpoint=0,limits=c(-1,1))+labs(x=NULL,y=NULL)+theme_minimal(base_size=12)+theme(axis.text.x=element_text(angle=45,hjust=1),panel.grid=element_blank())
+    cl<-reshape_cor(cm$cor,cm$pval); ggplot(cl,aes(x=Var1,y=Var2,fill=value))+geom_tile(color="white",linewidth=0.5)+geom_text(aes(label=label),size=3.2)+scale_fill_gradient2(low="#2166AC",mid="white",high="#B2182B",midpoint=0,limits=c(-1,1))+labs(x=NULL,y=NULL,title="Correlation Matrix")+theme_kernel()+theme(axis.text.x=element_text(angle=45,hjust=1),panel.grid=element_blank())
   })
   output$cor_table <- renderDT({ df<-doctor_data();req(df);cm<-compute_cor_matrix(df,input$cor_method%||%"pearson");validate(need(!is.null(cm),"Need 2+ numeric.")); out<-as.data.frame(round(cm$cor,3));out$var<-rownames(out);rownames(out)<-NULL;datatable(out,options=list(dom="tip",scrollX=TRUE),rownames=FALSE) })
 
@@ -925,20 +1237,20 @@ server <- function(input, output, session) {
   output$hyp_result <- renderDT({ datatable(hyp_r(),options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
   output$hyp_plot <- renderPlot({
     df<-doctor_data();req(df,input$hyp_v1);x<-df[[input$hyp_v1]];x<-x[!is.na(x)]
-    if(is.numeric(x)&&input$hyp_v2!=""&&input$hyp_v2%in%names(df)){g<-df[[input$hyp_v2]][!is.na(df[[input$hyp_v1]])]; ggplot(data.frame(v=x,g=factor(g)),aes(x=g,y=v,fill=g))+geom_boxplot(alpha=0.7,show.legend=FALSE)+theme_minimal(base_size=13)}
-    else if(is.numeric(x)){ggplot(data.frame(v=x),aes(x=v))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#d63384",alpha=0.5,color="white")+geom_density(linewidth=1,color="#d63384")+geom_vline(xintercept=input$hyp_mu,linetype="dashed",color="#dc3545")+theme_minimal(base_size=13)}
-    else{tab<-table(factor(x)); ggplot(data.frame(l=names(tab),c=as.integer(tab)),aes(x=reorder(l,-c),y=c))+geom_col(fill="#d63384",alpha=0.8)+labs(x=NULL,y="Count")+theme_minimal(base_size=13)}
+    if(is.numeric(x)&&input$hyp_v2!=""&&input$hyp_v2%in%names(df)){g<-df[[input$hyp_v2]][!is.na(df[[input$hyp_v1]])]; ggplot(data.frame(v=x,g=factor(g)),aes(x=g,y=v,fill=g))+geom_boxplot(alpha=0.7,show.legend=FALSE)+theme_kernel()}
+    else if(is.numeric(x)){ggplot(data.frame(v=x),aes(x=v))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#D63384",alpha=0.5,color="white")+geom_density(linewidth=1,color="#D63384")+geom_vline(xintercept=input$hyp_mu,linetype="dashed",color="#DC3545")+theme_kernel()}
+    else{tab<-table(factor(x)); ggplot(data.frame(l=names(tab),c=as.integer(tab)),aes(x=reorder(l,-c),y=c))+geom_col(fill="#D63384",alpha=0.8)+labs(x=NULL,y="Count")+theme_kernel()}
   })
   norm_r <- eventReactive(input$run_norm, { df<-doctor_data();req(df,input$norm_var);x<-df[[input$norm_var]];x<-x[!is.na(x)];validate(need(length(x)>=8,"Need 8+ values.")); list(x=x,var=input$norm_var,tests=lapply(c("Shapiro-Wilk","Anderson-Darling","Kolmogorov-Smirnov"),function(tn)run_hypothesis_test(df,tn,input$norm_var))) })
-  output$norm_qq <- renderPlot({ nr<-norm_r();x<-nr$x;n<-length(x); ggplot(data.frame(t=qnorm(ppoints(n)),s=sort(x)),aes(x=t,y=s))+geom_point(alpha=0.5,color="#d63384")+geom_abline(intercept=mean(x),slope=sd(x),linetype="dashed",color="#0d6efd")+labs(title="Q-Q plot",x="Theoretical",y="Sample")+theme_minimal(base_size=13) })
-  output$norm_hist <- renderPlot({ nr<-norm_r();x<-nr$x; ggplot(data.frame(x=x),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#d63384",alpha=0.4,color="white")+geom_density(linewidth=1.2,color="#d63384")+stat_function(fun=dnorm,args=list(mean=mean(x),sd=sd(x)),linetype="dashed",color="#0d6efd")+labs(title="Distribution",x=nr$var)+theme_minimal(base_size=13) })
+  output$norm_qq <- renderPlot({ nr<-norm_r();x<-nr$x;n<-length(x); ggplot(data.frame(t=qnorm(ppoints(n)),s=sort(x)),aes(x=t,y=s))+geom_point(alpha=0.5,color="#D63384")+geom_abline(intercept=mean(x),slope=sd(x),linetype="dashed",color="#2C5A8F")+labs(title="Q-Q Plot",x="Theoretical",y="Sample")+theme_kernel() })
+  output$norm_hist <- renderPlot({ nr<-norm_r();x<-nr$x; ggplot(data.frame(x=x),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#D63384",alpha=0.4,color="white")+geom_density(linewidth=1.2,color="#D63384")+stat_function(fun=dnorm,args=list(mean=mean(x),sd=sd(x)),linetype="dashed",color="#2C5A8F")+labs(title="Distribution",x=nr$var)+theme_kernel() })
   output$norm_tbl <- renderDT({ nr<-norm_r(); out<-do.call(rbind,lapply(seq_along(nr$tests),function(i){r<-nr$tests[[i]];r$test_name<-c("Shapiro-Wilk","Anderson-Darling","KS")[i];r})); datatable(out,options=list(dom="t"),rownames=FALSE) })
   pwr_r <- eventReactive(input$run_pwr, { run_hypothesis_test(doctor_data(),input$pwr_test,input$hyp_v1%||%names(doctor_data())[1],conf_level=1-(input$pwr_alpha%||%0.05)) })
   output$pwr_tbl <- renderDT({ datatable(pwr_r(),options=list(dom="t"),rownames=FALSE) })
-  output$pwr_curve <- renderPlot({ alpha<-input$pwr_alpha%||%0.05; n_seq<-seq(5,200,5); pd<-do.call(rbind,lapply(c(0.2,0.5,0.8),function(d){data.frame(n=n_seq,power=sapply(n_seq,function(n)power.t.test(n=n,delta=d,sd=1,sig.level=alpha)$power),effect=paste0("d=",d))})); ggplot(pd,aes(x=n,y=power,color=effect))+geom_line(linewidth=1.2)+geom_hline(yintercept=0.8,linetype="dashed",color="#999")+scale_y_continuous(labels=percent,limits=c(0,1))+labs(title="Power curve",x="n per group",y="Power")+theme_minimal(base_size=13) })
+  output$pwr_curve <- renderPlot({ alpha<-input$pwr_alpha%||%0.05; n_seq<-seq(5,200,5); pd<-do.call(rbind,lapply(c(0.2,0.5,0.8),function(d){data.frame(n=n_seq,power=sapply(n_seq,function(n)power.t.test(n=n,delta=d,sd=1,sig.level=alpha)$power),effect=paste0("d=",d))})); ggplot(pd,aes(x=n,y=power,color=effect))+geom_line(linewidth=1.2)+geom_hline(yintercept=0.8,linetype="dashed",color="#999")+scale_y_continuous(labels=percent,limits=c(0,1))+labs(title="Power Curve",x="n per group",y="Power")+theme_kernel() })
 
   # ── Regression ──
-  output$model_guidance <- renderText({ switch(input$mod_family,"Linear (Gaussian)"="Continuous outcome.","Binary logistic"="Two-level outcome. Log-odds scale.","Poisson"="Non-negative counts.","Negative binomial"="Overdispersed counts.","") })
+  output$model_guidance <- renderText({ switch(input$mod_family,"Linear (Gaussian)"="Continuous outcome. OLS regression.","Binary logistic"="Two-level outcome. Log-odds scale.","Poisson"="Non-negative counts.","Negative binomial"="Overdispersed counts.","") })
   output$mod_formula <- renderText({ req(input$mod_outcome); build_formula_text(input$mod_outcome,input$mod_preds%||%character(0),input$mod_inter,input$mod_poly) })
 
   fitted_model <- eventReactive(input$fit_mod, {
@@ -961,12 +1273,11 @@ server <- function(input, output, session) {
 
   output$mod_coef <- renderDT({ datatable(extract_coefficients(fitted_model()),options=list(pageLength=10,scrollX=TRUE),rownames=FALSE) })
   output$mod_metrics <- renderDT({ datatable(model_metrics(fitted_model()),options=list(dom="tip",scrollX=TRUE),rownames=FALSE) })
-  output$mod_coef_plot <- renderPlot({ fit<-fitted_model();ct<-extract_coefficients(fit);ct<-ct[!grepl("Intercept|\\|",ct$term),];validate(need(nrow(ct)>0,"No coefficients.")); ggplot(ct,aes(x=reorder(term,estimate),y=estimate,ymin=conf_low,ymax=conf_high))+geom_pointrange()+coord_flip()+labs(x=NULL,y="Estimate")+theme_minimal(base_size=12) })
+  output$mod_coef_plot <- renderPlot({ fit<-fitted_model();ct<-extract_coefficients(fit);ct<-ct[!grepl("Intercept|\\|",ct$term),];validate(need(nrow(ct)>0,"No coefficients.")); ggplot(ct,aes(x=reorder(term,estimate),y=estimate,ymin=conf_low,ymax=conf_high))+geom_pointrange(color="#2C5A8F",linewidth=0.8)+coord_flip()+labs(x=NULL,y="Estimate",title="Coefficient Plot")+theme_kernel() })
 
-  # ── Model diagnostics ──
-  output$diag_resid <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm")); ggplot(data.frame(f=fitted(fit),r=residuals(fit)),aes(x=f,y=r))+geom_point(alpha=0.5,color="#6f42c1")+geom_hline(yintercept=0,linetype="dashed",color="#dc3545")+geom_smooth(method="loess",se=FALSE,color="#0d6efd")+labs(title="Residuals vs Fitted")+theme_minimal(base_size=12) })
-  output$diag_qq <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm"));r<-residuals(fit); ggplot(data.frame(t=qnorm(ppoints(length(r))),s=sort(r)),aes(x=t,y=s))+geom_point(alpha=0.5,color="#6f42c1")+geom_abline(slope=sd(r),intercept=mean(r),linetype="dashed",color="#dc3545")+labs(title="Q-Q plot")+theme_minimal(base_size=12) })
-  output$diag_scale <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm")); ggplot(data.frame(f=fitted(fit),s=sqrt(abs(rstandard(fit)))),aes(x=f,y=s))+geom_point(alpha=0.5,color="#6f42c1")+geom_smooth(method="loess",se=FALSE,color="#0d6efd")+labs(title="Scale-Location")+theme_minimal(base_size=12) })
+  output$diag_resid <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm")); ggplot(data.frame(f=fitted(fit),r=residuals(fit)),aes(x=f,y=r))+geom_point(alpha=0.5,color="#6F42C1")+geom_hline(yintercept=0,linetype="dashed",color="#DC3545")+geom_smooth(method="loess",se=FALSE,color="#2C5A8F")+labs(title="Residuals vs Fitted")+theme_kernel() })
+  output$diag_qq <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm"));r<-residuals(fit); ggplot(data.frame(t=qnorm(ppoints(length(r))),s=sort(r)),aes(x=t,y=s))+geom_point(alpha=0.5,color="#6F42C1")+geom_abline(slope=sd(r),intercept=mean(r),linetype="dashed",color="#DC3545")+labs(title="Q-Q Plot")+theme_kernel() })
+  output$diag_scale <- renderPlot({ fit<-fitted_model();req(inherits(fit,"lm")); ggplot(data.frame(f=fitted(fit),s=sqrt(abs(rstandard(fit)))),aes(x=f,y=s))+geom_point(alpha=0.5,color="#6F42C1")+geom_smooth(method="loess",se=FALSE,color="#2C5A8F")+labs(title="Scale-Location")+theme_kernel() })
   output$diag_checks <- renderDT({ fit<-fitted_model();req(inherits(fit,"lm"));ch<-check_assumptions_lm(fit);rows<-list(); for(nm in c("normality","homoscedasticity","autocorrelation"))if(!is.null(ch[[nm]]))rows[[length(rows)+1]]<-ch[[nm]]; if(!length(rows)) return(datatable(data.frame(msg="N/A"),options=list(dom="t"),rownames=FALSE)); datatable(do.call(rbind,rows),options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
 
   # ── Multivariate ──
@@ -981,10 +1292,10 @@ server <- function(input, output, session) {
 
   output$multi_plot <- renderPlot({
     res<-multi_result()
-    if(res$method=="PCA"){sc<-as.data.frame(res$fit$x[,1:2]);ggplot(sc,aes(PC1,PC2))+geom_point(alpha=0.7)+labs(title="PCA scores")+theme_minimal(base_size=12)}
-    else if(res$method%in%c("MCA","FAMD")){co<-as.data.frame(res$fit$ind$coord[,1:2]);names(co)<-c("D1","D2");ggplot(co,aes(D1,D2))+geom_point(alpha=0.7)+labs(title=paste(res$method,"map"))+theme_minimal(base_size=12)}
-    else if(res$method=="K-means"){pc<-prcomp(res$data,center=T,scale.=T);sc<-as.data.frame(pc$x[,1:2]);sc$cl<-factor(res$fit$cluster);ggplot(sc,aes(PC1,PC2,color=cl))+geom_point(alpha=0.8)+labs(title="K-means clusters")+theme_minimal(base_size=12)}
-    else{co<-as.data.frame(cmdscale(res$diss,k=2));names(co)<-c("D1","D2");co$cl<-factor(res$fit$clustering);ggplot(co,aes(D1,D2,color=cl))+geom_point(alpha=0.8)+labs(title="PAM/Gower")+theme_minimal(base_size=12)}
+    if(res$method=="PCA"){sc<-as.data.frame(res$fit$x[,1:2]);ggplot(sc,aes(PC1,PC2))+geom_point(alpha=0.7,color="#2C5A8F")+labs(title="PCA Scores")+theme_kernel()}
+    else if(res$method%in%c("MCA","FAMD")){co<-as.data.frame(res$fit$ind$coord[,1:2]);names(co)<-c("D1","D2");ggplot(co,aes(D1,D2))+geom_point(alpha=0.7,color="#2C5A8F")+labs(title=paste(res$method,"Map"))+theme_kernel()}
+    else if(res$method=="K-means"){pc<-prcomp(res$data,center=T,scale.=T);sc<-as.data.frame(pc$x[,1:2]);sc$cl<-factor(res$fit$cluster);ggplot(sc,aes(PC1,PC2,color=cl))+geom_point(alpha=0.8)+labs(title="K-means Clusters")+theme_kernel()}
+    else{co<-as.data.frame(cmdscale(res$diss,k=2));names(co)<-c("D1","D2");co$cl<-factor(res$fit$clustering);ggplot(co,aes(D1,D2,color=cl))+geom_point(alpha=0.8)+labs(title="PAM / Gower")+theme_kernel()}
   })
   output$multi_summary <- renderDT({
     res<-multi_result()
@@ -995,13 +1306,13 @@ server <- function(input, output, session) {
   })
   output$multi_scree <- renderPlot({
     res<-multi_result()
-    if(res$method=="PCA"){ve<-summary(res$fit)$importance[2,]*100;pd<-data.frame(c=seq_along(ve),v=ve);ggplot(pd,aes(c,v))+geom_line(color="#6f42c1",linewidth=1)+geom_point(color="#6f42c1",size=3)+labs(title="Scree plot",x="Component",y="% Variance")+theme_minimal(base_size=12)}
-    else if(res$method=="K-means"){mk<-min(10,nrow(res$data)-1);if(mk<2)return(NULL);wss<-sapply(2:mk,function(k)kmeans(res$data,k,nstart=10)$tot.withinss);ggplot(data.frame(k=2:mk,w=wss),aes(k,w))+geom_line(color="#6f42c1",linewidth=1)+geom_point(color="#6f42c1",size=3)+labs(title="Elbow plot",x="k",y="Within SS")+theme_minimal(base_size=12)}
+    if(res$method=="PCA"){ve<-summary(res$fit)$importance[2,]*100;pd<-data.frame(c=seq_along(ve),v=ve);ggplot(pd,aes(c,v))+geom_line(color="#6F42C1",linewidth=1)+geom_point(color="#6F42C1",size=3)+labs(title="Scree Plot",x="Component",y="% Variance")+theme_kernel()}
+    else if(res$method=="K-means"){mk<-min(10,nrow(res$data)-1);if(mk<2)return(NULL);wss<-sapply(2:mk,function(k)kmeans(res$data,k,nstart=10)$tot.withinss);ggplot(data.frame(k=2:mk,w=wss),aes(k,w))+geom_line(color="#6F42C1",linewidth=1)+geom_point(color="#6F42C1",size=3)+labs(title="Elbow Plot",x="k",y="Within SS")+theme_kernel()}
     else{plot.new();text(0.5,0.5,"N/A for this method.",cex=1.2)}
   })
   output$multi_dendro <- renderPlot({
     df<-doctor_data();req(df);num<-df[,vapply(df,is.numeric,logical(1)),drop=FALSE];num<-num[,vapply(num,function(x)sd(x,na.rm=T)>0,logical(1)),drop=FALSE];num<-safe_complete(num);validate(need(ncol(num)>=2,"Need 2+ numeric."))
-    nu<-min(nrow(num),200);if(nrow(num)>200)num<-num[sample(nrow(num),200),];hc<-hclust(dist(scale(num)),method="ward.D2");plot(hc,labels=FALSE,main="Dendrogram",sub="",hang=-1);if(!is.null(input$multi_k))rect.hclust(hc,k=input$multi_k,border=c("#dc3545","#0d6efd","#198754","#fd7e14","#6f42c1"))
+    nu<-min(nrow(num),200);if(nrow(num)>200)num<-num[sample(nrow(num),200),];hc<-hclust(dist(scale(num)),method="ward.D2");plot(hc,labels=FALSE,main="Dendrogram",sub="",hang=-1);if(!is.null(input$multi_k))rect.hclust(hc,k=input$multi_k,border=c("#DC3545","#2C5A8F","#198754","#FD7E14","#6F42C1"))
   })
 
   # ── Time Series ──
@@ -1017,20 +1328,20 @@ server <- function(input, output, session) {
     list(dates=dates,values=vals,ts=ts_obj,freq=freq,name=input$ts_val)
   })
 
-  output$ts_line <- renderPlot({ td<-ts_data();ggplot(data.frame(d=td$dates,v=td$values),aes(d,v))+geom_line(color="#0d6efd",linewidth=0.6)+geom_smooth(method="loess",se=FALSE,color="#dc3545",linewidth=0.8,linetype="dashed")+labs(title=paste("Time series:",td$name),subtitle=paste0("Freq: ",freq_label(td$freq)," | n=",length(td$values)),x="Date",y=td$name)+theme_minimal(base_size=13) })
-  output$ts_acf <- renderPlot({ td<-ts_data();a<-acf(td$values,lag.max=min(40,length(td$values)/3),plot=FALSE);ci<-1.96/sqrt(length(td$values));ad<-data.frame(lag=a$lag[-1],acf=a$acf[-1]); ggplot(ad,aes(lag,acf))+geom_hline(yintercept=0)+geom_hline(yintercept=c(-ci,ci),linetype="dashed",color="#dc3545")+geom_segment(aes(xend=lag,yend=0),color="#0d6efd",linewidth=0.8)+labs(title="ACF")+theme_minimal(base_size=12) })
-  output$ts_pacf <- renderPlot({ td<-ts_data();p<-pacf(td$values,lag.max=min(40,length(td$values)/3),plot=FALSE);ci<-1.96/sqrt(length(td$values));pd<-data.frame(lag=p$lag,acf=p$acf); ggplot(pd,aes(lag,acf))+geom_hline(yintercept=0)+geom_hline(yintercept=c(-ci,ci),linetype="dashed",color="#dc3545")+geom_segment(aes(xend=lag,yend=0),color="#6f42c1",linewidth=0.8)+labs(title="PACF")+theme_minimal(base_size=12) })
+  output$ts_line <- renderPlot({ td<-ts_data();ggplot(data.frame(d=td$dates,v=td$values),aes(d,v))+geom_line(color="#2C5A8F",linewidth=0.6)+geom_smooth(method="loess",se=FALSE,color="#DC3545",linewidth=0.8,linetype="dashed")+labs(title=paste("Time Series:",td$name),subtitle=paste0("Freq: ",freq_label(td$freq)," | n=",length(td$values)),x="Date",y=td$name)+theme_kernel() })
+  output$ts_acf <- renderPlot({ td<-ts_data();a<-acf(td$values,lag.max=min(40,length(td$values)/3),plot=FALSE);ci<-1.96/sqrt(length(td$values));ad<-data.frame(lag=a$lag[-1],acf=a$acf[-1]); ggplot(ad,aes(lag,acf))+geom_hline(yintercept=0)+geom_hline(yintercept=c(-ci,ci),linetype="dashed",color="#DC3545")+geom_segment(aes(xend=lag,yend=0),color="#2C5A8F",linewidth=0.8)+labs(title="ACF")+theme_kernel() })
+  output$ts_pacf <- renderPlot({ td<-ts_data();p<-pacf(td$values,lag.max=min(40,length(td$values)/3),plot=FALSE);ci<-1.96/sqrt(length(td$values));pd<-data.frame(lag=p$lag,acf=p$acf); ggplot(pd,aes(lag,acf))+geom_hline(yintercept=0)+geom_hline(yintercept=c(-ci,ci),linetype="dashed",color="#DC3545")+geom_segment(aes(xend=lag,yend=0),color="#6F42C1",linewidth=0.8)+labs(title="PACF")+theme_kernel() })
   output$ts_decomp <- renderPlot({ td<-ts_data();validate(need(td$freq>1&&length(td$values)>=2*td$freq,"Need freq>1 and 2+ cycles.")); dc<-tryCatch(stl(td$ts,s.window="periodic"),error=function(e)tryCatch(decompose(td$ts),error=function(e2)NULL));validate(need(!is.null(dc),"Cannot decompose.")); if(inherits(dc,"stl"))plot(dc) else plot(dc) })
 
   station_r <- eventReactive(input$run_station, { td<-ts_data();validate(need(length(td$values)>=20,"Need 20+ obs."));run_stationarity_tests(td$values) })
   output$station_tbl <- renderDT({ datatable(station_r(),options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
-  output$station_interp <- renderUI({ res<-station_r();adf_p<-res$p_value[res$test=="ADF"];kpss_p<-res$p_value[res$test=="KPSS"]; msg<-if(length(adf_p)&&length(kpss_p)){if(adf_p<0.05&&kpss_p>=0.05)"Series appears STATIONARY." else if(adf_p>=0.05&&kpss_p<0.05)"Series appears NON-STATIONARY. Try differencing." else "Tests disagree."} else "Install tseries."; div(class="tab-note",style="border-left-color:#0d6efd;margin-top:12px;",p(strong("Interpretation: "),msg)) })
+  output$station_interp <- renderUI({ res<-station_r();adf_p<-res$p_value[res$test=="ADF"];kpss_p<-res$p_value[res$test=="KPSS"]; msg<-if(length(adf_p)&&length(kpss_p)){if(adf_p<0.05&&kpss_p>=0.05)"Series appears STATIONARY." else if(adf_p>=0.05&&kpss_p<0.05)"Series appears NON-STATIONARY. Try differencing." else "Tests disagree."} else "Install tseries."; note_div(p(strong("Interpretation: "),msg)) })
 
   arima_r <- eventReactive(input$fit_arima, { td<-ts_data();validate(need(has_pkg("forecast"),"Install forecast."),need(length(td$values)>=20,"Need 20+ obs.")); fit<-forecast::auto.arima(td$ts,stepwise=TRUE,approximation=TRUE);fc<-forecast::forecast(fit,h=input$arima_h%||%12);list(fit=fit,fc=fc,data=td) })
   output$arima_summary <- renderPrint({ summary(arima_r()$fit) })
   output$arima_metrics <- renderDT({ af<-arima_r();acc<-tryCatch(forecast::accuracy(af$fit),error=function(e)NULL); if(!is.null(acc))datatable(data.frame(metric=colnames(acc),value=round(as.numeric(acc[1,]),4)),options=list(dom="t"),rownames=FALSE) else datatable(data.frame(metric=c("AIC","BIC"),value=c(round(AIC(af$fit),2),round(BIC(af$fit),2))),options=list(dom="t"),rownames=FALSE) })
-  output$arima_fc <- renderPlot({ af<-arima_r();plot(af$fc,main=paste("ARIMA Forecast:",af$data$name),xlab="Time",ylab=af$data$name,col="#0d6efd",fcol="#dc3545",lwd=2) })
-  output$arima_resid <- renderPlot({ af<-arima_r();r<-residuals(af$fit); ggplot(data.frame(x=r),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#0d6efd",alpha=0.5,color="white")+geom_density(linewidth=1,color="#0d6efd")+stat_function(fun=dnorm,args=list(mean=mean(r),sd=sd(r)),linetype="dashed",color="#dc3545")+labs(title="ARIMA residuals")+theme_minimal(base_size=12) })
+  output$arima_fc <- renderPlot({ af<-arima_r();plot(af$fc,main=paste("ARIMA Forecast:",af$data$name),xlab="Time",ylab=af$data$name,col="#2C5A8F",fcol="#DC3545",lwd=2) })
+  output$arima_resid <- renderPlot({ af<-arima_r();r<-residuals(af$fit); ggplot(data.frame(x=r),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#2C5A8F",alpha=0.5,color="white")+geom_density(linewidth=1,color="#2C5A8F")+stat_function(fun=dnorm,args=list(mean=mean(r),sd=sd(r)),linetype="dashed",color="#DC3545")+labs(title="ARIMA Residuals")+theme_kernel() })
   output$arima_ljung <- renderDT({ af<-arima_r();r<-residuals(af$fit); out<-do.call(rbind,lapply(c(10,15,20),function(lag){bt<-Box.test(r,lag=lag,type="Ljung-Box");data.frame(lag=lag,stat=round(bt$statistic,4),p=signif(bt$p.value,4),verdict=ifelse(bt$p.value>0.05,"PASS","FAIL"),stringsAsFactors=FALSE)})); datatable(out,options=list(dom="t"),rownames=FALSE) })
 
   # ── GARCH ──
@@ -1038,10 +1349,10 @@ server <- function(input, output, session) {
     spec<-rugarch::ugarchspec(variance.model=list(model=vm,garchOrder=c(input$garch_p,input$garch_q)),mean.model=list(armaOrder=c(0,0),include.mean=TRUE),distribution.model="std"); fit<-rugarch::ugarchfit(spec,data=vals,solver="hybrid"); fc<-rugarch::ugarchforecast(fit,n.ahead=input$garch_h%||%20); list(fit=fit,fc=fc,data=td,vals=vals) })
   output$garch_summary <- renderPrint({ show(garch_r()$fit) })
   output$garch_coef <- renderDT({ gf<-garch_r();cf<-rugarch::coef(gf$fit);se<-sqrt(diag(rugarch::vcov(gf$fit))); datatable(data.frame(param=names(cf),est=round(cf,6),se=round(se,6),t=round(cf/se,4),p=signif(2*pnorm(-abs(cf/se)),4)),options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
-  output$garch_vol <- renderPlot({ gf<-garch_r();sig<-as.numeric(rugarch::sigma(gf$fit)); ggplot(data.frame(t=seq_along(sig),s=sig),aes(t,s))+geom_line(color="#dc3545",linewidth=0.7)+labs(title=paste(input$garch_type,"— Conditional volatility"),x="Time",y=expression(sigma[t]))+theme_minimal(base_size=13) })
-  output$garch_resid <- renderPlot({ gf<-garch_r();sr<-as.numeric(rugarch::residuals(gf$fit,standardize=TRUE)); ggplot(data.frame(t=seq_along(sr),r=sr),aes(t,r))+geom_point(alpha=0.3,color="#6f42c1",size=1)+geom_hline(yintercept=c(-2,2),linetype="dashed",color="#dc3545")+labs(title="Std. residuals")+theme_minimal(base_size=12) })
-  output$garch_nic <- renderPlot({ gf<-garch_r();ni<-tryCatch(rugarch::newsimpact(gf$fit),error=function(e)NULL); if(is.null(ni)){plot.new();text(0.5,0.5,"N/A",cex=1.2);return()}; ggplot(data.frame(z=ni$zx,h=ni$zy),aes(z,h))+geom_line(color="#dc3545",linewidth=1.2)+geom_vline(xintercept=0,linetype="dashed",color="#999")+labs(title="News impact curve")+theme_minimal(base_size=13) })
-  output$garch_fc <- renderPlot({ gf<-garch_r();fs<-as.numeric(rugarch::sigma(gf$fc)); ggplot(data.frame(h=seq_along(fs),s=fs),aes(h,s))+geom_line(color="#dc3545",linewidth=1.2)+geom_point(color="#dc3545",size=2)+labs(title="Volatility forecast",x="Horizon",y=expression(sigma[t+h]))+theme_minimal(base_size=13) })
+  output$garch_vol <- renderPlot({ gf<-garch_r();sig<-as.numeric(rugarch::sigma(gf$fit)); ggplot(data.frame(t=seq_along(sig),s=sig),aes(t,s))+geom_line(color="#DC3545",linewidth=0.7)+labs(title=paste(input$garch_type,"\u2014 Conditional Volatility"),x="Time",y=expression(sigma[t]))+theme_kernel() })
+  output$garch_resid <- renderPlot({ gf<-garch_r();sr<-as.numeric(rugarch::residuals(gf$fit,standardize=TRUE)); ggplot(data.frame(t=seq_along(sr),r=sr),aes(t,r))+geom_point(alpha=0.3,color="#6F42C1",size=1)+geom_hline(yintercept=c(-2,2),linetype="dashed",color="#DC3545")+labs(title="Standardized Residuals")+theme_kernel() })
+  output$garch_nic <- renderPlot({ gf<-garch_r();ni<-tryCatch(rugarch::newsimpact(gf$fit),error=function(e)NULL); if(is.null(ni)){plot.new();text(0.5,0.5,"N/A",cex=1.2);return()}; ggplot(data.frame(z=ni$zx,h=ni$zy),aes(z,h))+geom_line(color="#DC3545",linewidth=1.2)+geom_vline(xintercept=0,linetype="dashed",color="#999")+labs(title="News Impact Curve")+theme_kernel() })
+  output$garch_fc <- renderPlot({ gf<-garch_r();fs<-as.numeric(rugarch::sigma(gf$fc)); ggplot(data.frame(h=seq_along(fs),s=fs),aes(h,s))+geom_line(color="#DC3545",linewidth=1.2)+geom_point(color="#DC3545",size=2)+labs(title="Volatility Forecast",x="Horizon",y=expression(sigma[t+h]))+theme_kernel() })
 
   # ── Survival ──
   km_r <- eventReactive(input$run_km, {
@@ -1051,7 +1362,7 @@ server <- function(input, output, session) {
     if(input$surv_group!=""&&input$surv_group%in%names(sdf)){fit<-survival::survfit(so~factor(sdf[[input$surv_group]]));lr<-survival::survdiff(so~factor(sdf[[input$surv_group]]))} else{fit<-survival::survfit(so~1);lr<-NULL}
     list(fit=fit,lr=lr,grp=input$surv_group)
   })
-  output$km_plot <- renderPlot({ km<-km_r(); if(has_pkg("survminer"))print(survminer::ggsurvplot(km$fit,pval=!is.null(km$lr),conf.int=TRUE,ggtheme=theme_minimal(base_size=13))) else{plot(km$fit,col=c("#0d6efd","#dc3545","#198754","#fd7e14"),lwd=2,main="KM curve")} })
+  output$km_plot <- renderPlot({ km<-km_r(); if(has_pkg("survminer"))print(survminer::ggsurvplot(km$fit,pval=!is.null(km$lr),conf.int=TRUE,ggtheme=theme_kernel())) else{plot(km$fit,col=c("#2C5A8F","#DC3545","#198754","#FD7E14"),lwd=2,main="Kaplan-Meier Curve")} })
   output$km_summary <- renderDT({ km<-km_r();sm<-summary(km$fit)$table; if(is.matrix(sm)){out<-as.data.frame(sm);out$grp<-rownames(out)} else out<-data.frame(metric=names(sm),value=round(as.numeric(sm),3)); datatable(out,options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
   output$km_logrank <- renderDT({ km<-km_r(); if(is.null(km$lr))return(datatable(data.frame(msg="Add grouping variable."),options=list(dom="t"),rownames=FALSE)); pv<-1-pchisq(km$lr$chisq,length(km$lr$n)-1); datatable(data.frame(stat=c("Chi-sq","df","p-value"),value=c(round(km$lr$chisq,4),length(km$lr$n)-1,signif(pv,4))),options=list(dom="t"),rownames=FALSE) })
 
@@ -1061,19 +1372,19 @@ server <- function(input, output, session) {
     so<-survival::Surv(cdf[[input$surv_time]],cdf[[input$surv_event]]);form<-as.formula(paste("so~",paste(input$cox_preds,collapse="+")));list(fit=survival::coxph(form,data=cdf),data=cdf)
   })
   output$cox_coef <- renderDT({ cx<-cox_r();sm<-summary(cx$fit);cf<-as.data.frame(sm$coefficients);cf$term<-rownames(cf);cf$HR<-round(exp(cf$coef),4);cf$HR_lo<-round(exp(cf$coef-1.96*cf$`se(coef)`),4);cf$HR_hi<-round(exp(cf$coef+1.96*cf$`se(coef)`),4); datatable(cf[,c("term","coef","se(coef)","HR","HR_lo","HR_hi","Pr(>|z|)")],options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
-  output$cox_forest <- renderPlot({ cx<-cox_r();sm<-summary(cx$fit);cf<-as.data.frame(sm$coefficients);cf$term<-rownames(cf);cf$HR<-exp(cf$coef);cf$lo<-exp(cf$coef-1.96*cf$`se(coef)`);cf$hi<-exp(cf$coef+1.96*cf$`se(coef)`); ggplot(cf,aes(x=HR,y=reorder(term,HR),xmin=lo,xmax=hi))+geom_pointrange(color="#dc3545",linewidth=0.8)+geom_vline(xintercept=1,linetype="dashed")+scale_x_log10()+labs(title="Hazard ratio forest plot",x="HR (log scale)",y=NULL)+theme_minimal(base_size=13) })
+  output$cox_forest <- renderPlot({ cx<-cox_r();sm<-summary(cx$fit);cf<-as.data.frame(sm$coefficients);cf$term<-rownames(cf);cf$HR<-exp(cf$coef);cf$lo<-exp(cf$coef-1.96*cf$`se(coef)`);cf$hi<-exp(cf$coef+1.96*cf$`se(coef)`); ggplot(cf,aes(x=HR,y=reorder(term,HR),xmin=lo,xmax=hi))+geom_pointrange(color="#DC3545",linewidth=0.8)+geom_vline(xintercept=1,linetype="dashed")+scale_x_log10()+labs(title="Hazard Ratio Forest Plot",x="HR (log scale)",y=NULL)+theme_kernel() })
   output$cox_metrics <- renderDT({ cx<-cox_r();sm<-summary(cx$fit); datatable(data.frame(metric=c("n","Events","C-index","LR p","Wald p"),value=c(sm$n,sm$nevent,round(sm$concordance[1],4),signif(sm$logtest[3],4),signif(sm$waldtest[3],4))),options=list(dom="t"),rownames=FALSE) })
   output$cox_ph <- renderDT({ cx<-cox_r();ph<-tryCatch({zt<-survival::cox.zph(cx$fit);out<-as.data.frame(zt$table);out$term<-rownames(out);out$verdict<-ifelse(out[,3]<0.05,"VIOLATION","OK");out},error=function(e)data.frame(msg=e$message)); datatable(ph,options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
 
   # ── ML Pipeline ──
-  output$ml_task_card <- renderUI({ df<-doctor_data();req(df,input$ml_y);task<-ml_detect_task(df[[input$ml_y]]);cl<-if(task=="classification")"#6f42c1" else "#0d6efd"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Task"),div(class="value",style=paste0("color:",cl,";font-size:1.2rem;"),toupper(task))) })
+  output$ml_task_card <- renderUI({ df<-doctor_data();req(df,input$ml_y);task<-ml_detect_task(df[[input$ml_y]]);cl<-if(task=="classification")"#6F42C1" else "#2C5A8F"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","Task"),div(class="value",style=paste0("color:",cl,";font-size:1.2rem;"),toupper(task))) })
 
   ml_r <- eventReactive(input$ml_train, {
     df<-doctor_data();req(df,input$ml_y,input$ml_x,input$ml_methods);validate(need(length(input$ml_x)>=1,"Select predictors."))
     task<-ml_detect_task(df[[input$ml_y]]);sp<-ml_split_data(df,input$ml_y,input$ml_x,input$ml_split/100);train<-sp$train;test<-sp$test
     if(task=="classification"){train[[input$ml_y]]<-factor(train[[input$ml_y]]);test[[input$ml_y]]<-factor(test[[input$ml_y]],levels=levels(train[[input$ml_y]]))}
     results<-list()
-    withProgress(message="Training...",value=0,{
+    withProgress(message="Training models...",value=0,{
       for(i in seq_along(input$ml_methods)){m<-input$ml_methods[i];incProgress(1/length(input$ml_methods),detail=m)
         if(m=="Logistic Reg."&&task=="regression")next; if(m%in%c("Naive Bayes","KNN")&&task=="regression")next
         fit<-ml_fit(train,input$ml_y,input$ml_x,m,task); if(is.list(fit)&&isTRUE(fit$error)){results[[m]]<-list(error=TRUE,message=fit$message);next}
@@ -1088,11 +1399,11 @@ server <- function(input, output, session) {
   observe({ res<-tryCatch(ml_r(),error=function(e)NULL); if(!is.null(res)){v<-names(res$results)[!sapply(res$results,function(r)isTRUE(r$error))]; updateSelectInput(session,"ml_imp_sel",choices=v,selected=v[1]); updateSelectInput(session,"ml_pred_sel",choices=v,selected=v[1]); updateSelectInput(session,"ml_cm_sel",choices=v,selected=v[1])} })
 
   output$ml_compare <- renderDT({ res<-ml_r();v<-res$results[!sapply(res$results,function(r)isTRUE(r$error))]; if(!length(v))return(datatable(data.frame(msg="No models trained."),options=list(dom="t"),rownames=FALSE)); all_m<-do.call(rbind,lapply(names(v),function(m){d<-v[[m]]$metrics;d$model<-m;d})); datatable(pivot_wider(all_m,names_from=metric,values_from=value),options=list(dom="t",scrollX=TRUE),rownames=FALSE) })
-  output$ml_bar <- renderPlot({ res<-ml_r();v<-res$results[!sapply(res$results,function(r)isTRUE(r$error))];pm<-if(res$task=="classification")"Accuracy" else "R-squared"; vals<-sapply(v,function(r){vv<-r$metrics$value[r$metrics$metric==pm];if(length(vv))as.numeric(vv) else NA});pd<-data.frame(m=names(vals),v=vals);pd<-pd[!is.na(pd$v),]; ggplot(pd,aes(reorder(m,v),v,fill=m))+geom_col(show.legend=FALSE,alpha=0.85,width=0.6)+geom_text(aes(label=round(v,3)),hjust=-0.1,size=4)+coord_flip()+labs(title=pm,x=NULL,y=pm)+theme_minimal(base_size=13) })
-  output$ml_roc <- renderPlot({ res<-ml_r();req(res$task=="classification"); if(!has_pkg("pROC")){plot.new();text(0.5,0.5,"Install pROC");return()}; v<-res$results[!sapply(res$results,function(r)isTRUE(r$error))];actual<-res$test[[res$outcome]]; cols<-c("#6f42c1","#0d6efd","#dc3545","#198754","#fd7e14","#d63384","#20c997"); plot(NULL,xlim=c(1,0),ylim=c(0,1),xlab="Specificity",ylab="Sensitivity",main="ROC curves");abline(a=1,b=-1,lty=2,col="#999");ll<-c();lc<-c(); for(i in seq_along(v)){m<-names(v)[i];r<-v[[m]];pr<-r$pred$prob; if(is.null(pr))next;pv<-if(is.matrix(pr))pr[,ncol(pr)] else pr; ro<-tryCatch(pROC::roc(actual,pv,quiet=TRUE),error=function(e)NULL); if(!is.null(ro)){lines(ro,col=cols[i],lwd=2);ll<-c(ll,paste0(m," (AUC=",round(pROC::auc(ro),3),")"));lc<-c(lc,cols[i])}}; if(length(ll))legend("bottomright",legend=ll,col=lc,lwd=2,cex=0.8) })
-  output$ml_imp <- renderPlot({ res<-ml_r();req(input$ml_imp_sel);r<-res$results[[input$ml_imp_sel]]; if(is.null(r)||isTRUE(r$error))return(NULL); imp<-ml_importance(r$fit,input$ml_imp_sel); if(is.null(imp)){plot.new();text(0.5,0.5,"N/A",cex=1.2);return()}; imp<-head(imp[order(imp$importance,decreasing=TRUE),],20); ggplot(imp,aes(reorder(variable,importance),importance))+geom_col(fill="#6f42c1",alpha=0.8)+coord_flip()+labs(title=paste("Importance:",input$ml_imp_sel),x=NULL)+theme_minimal(base_size=13) })
-  output$ml_pred_plot <- renderPlot({ res<-ml_r();req(input$ml_pred_sel);r<-res$results[[input$ml_pred_sel]]; if(is.null(r)||isTRUE(r$error))return(NULL); if(res$task=="regression"){ggplot(data.frame(a=res$test[[res$outcome]],p=r$pred$value),aes(a,p))+geom_point(alpha=0.5,color="#6f42c1")+geom_abline(slope=1,intercept=0,linetype="dashed",color="#dc3545")+labs(title="Actual vs Predicted",x="Actual",y="Predicted")+theme_minimal(base_size=13)} else{actual<-factor(res$test[[res$outcome]]);predicted<-factor(r$pred$class,levels=levels(actual)); ggplot(data.frame(a=actual,c=actual==predicted),aes(a,fill=c))+geom_bar(position="fill")+scale_fill_manual(values=c("TRUE"="#198754","FALSE"="#dc3545"),labels=c("Wrong","Correct"))+labs(title="Classification",x="Actual",y="Proportion")+theme_minimal(base_size=13)} })
-  output$ml_cm <- renderPlot({ res<-ml_r();req(input$ml_cm_sel,res$task=="classification");r<-res$results[[input$ml_cm_sel]]; if(is.null(r)||isTRUE(r$error)||is.null(r$confusion))return(NULL);cm<-as.data.frame(r$confusion); ggplot(cm,aes(x=Actual,y=Predicted,fill=Freq))+geom_tile(color="white")+geom_text(aes(label=Freq),size=6,fontface="bold")+scale_fill_gradient(low="white",high="#6f42c1")+labs(title="Confusion matrix")+theme_minimal(base_size=13)+theme(panel.grid=element_blank()) })
+  output$ml_bar <- renderPlot({ res<-ml_r();v<-res$results[!sapply(res$results,function(r)isTRUE(r$error))];pm<-if(res$task=="classification")"Accuracy" else "R-squared"; vals<-sapply(v,function(r){vv<-r$metrics$value[r$metrics$metric==pm];if(length(vv))as.numeric(vv) else NA});pd<-data.frame(m=names(vals),v=vals);pd<-pd[!is.na(pd$v),]; ggplot(pd,aes(reorder(m,v),v,fill=m))+geom_col(show.legend=FALSE,alpha=0.85,width=0.6)+geom_text(aes(label=round(v,3)),hjust=-0.1,size=4)+coord_flip()+labs(title=pm,x=NULL,y=pm)+theme_kernel() })
+  output$ml_roc <- renderPlot({ res<-ml_r();req(res$task=="classification"); if(!has_pkg("pROC")){plot.new();text(0.5,0.5,"Install pROC");return()}; v<-res$results[!sapply(res$results,function(r)isTRUE(r$error))];actual<-res$test[[res$outcome]]; cols<-c("#6F42C1","#2C5A8F","#DC3545","#198754","#FD7E14","#D63384","#14B8A6"); plot(NULL,xlim=c(1,0),ylim=c(0,1),xlab="Specificity",ylab="Sensitivity",main="ROC Curves");abline(a=1,b=-1,lty=2,col="#999");ll<-c();lc<-c(); for(i in seq_along(v)){m<-names(v)[i];r<-v[[m]];pr<-r$pred$prob; if(is.null(pr))next;pv<-if(is.matrix(pr))pr[,ncol(pr)] else pr; ro<-tryCatch(pROC::roc(actual,pv,quiet=TRUE),error=function(e)NULL); if(!is.null(ro)){lines(ro,col=cols[i],lwd=2);ll<-c(ll,paste0(m," (AUC=",round(pROC::auc(ro),3),")"));lc<-c(lc,cols[i])}}; if(length(ll))legend("bottomright",legend=ll,col=lc,lwd=2,cex=0.8) })
+  output$ml_imp <- renderPlot({ res<-ml_r();req(input$ml_imp_sel);r<-res$results[[input$ml_imp_sel]]; if(is.null(r)||isTRUE(r$error))return(NULL); imp<-ml_importance(r$fit,input$ml_imp_sel); if(is.null(imp)){plot.new();text(0.5,0.5,"N/A",cex=1.2);return()}; imp<-head(imp[order(imp$importance,decreasing=TRUE),],20); ggplot(imp,aes(reorder(variable,importance),importance))+geom_col(fill="#6F42C1",alpha=0.8)+coord_flip()+labs(title=paste("Importance:",input$ml_imp_sel),x=NULL)+theme_kernel() })
+  output$ml_pred_plot <- renderPlot({ res<-ml_r();req(input$ml_pred_sel);r<-res$results[[input$ml_pred_sel]]; if(is.null(r)||isTRUE(r$error))return(NULL); if(res$task=="regression"){ggplot(data.frame(a=res$test[[res$outcome]],p=r$pred$value),aes(a,p))+geom_point(alpha=0.5,color="#6F42C1")+geom_abline(slope=1,intercept=0,linetype="dashed",color="#DC3545")+labs(title="Actual vs Predicted",x="Actual",y="Predicted")+theme_kernel()} else{actual<-factor(res$test[[res$outcome]]);predicted<-factor(r$pred$class,levels=levels(actual)); ggplot(data.frame(a=actual,c=actual==predicted),aes(a,fill=c))+geom_bar(position="fill")+scale_fill_manual(values=c("TRUE"="#198754","FALSE"="#DC3545"),labels=c("Wrong","Correct"))+labs(title="Classification",x="Actual",y="Proportion")+theme_kernel()} })
+  output$ml_cm <- renderPlot({ res<-ml_r();req(input$ml_cm_sel,res$task=="classification");r<-res$results[[input$ml_cm_sel]]; if(is.null(r)||isTRUE(r$error)||is.null(r$confusion))return(NULL);cm<-as.data.frame(r$confusion); ggplot(cm,aes(x=Actual,y=Predicted,fill=Freq))+geom_tile(color="white")+geom_text(aes(label=Freq),size=6,fontface="bold")+scale_fill_gradient(low="white",high="#6F42C1")+labs(title="Confusion Matrix")+theme_kernel()+theme(panel.grid=element_blank()) })
   output$ml_cm_tbl <- renderDT({ res<-ml_r();req(input$ml_cm_sel);r<-res$results[[input$ml_cm_sel]]; if(is.null(r)||isTRUE(r$error))return(NULL); datatable(r$metrics,options=list(dom="t"),rownames=FALSE) })
   output$ml_tree <- renderPlot({ res<-ml_r();dt<-res$results[["Decision Tree"]]; if(is.null(dt)||isTRUE(dt$error)){plot.new();text(0.5,0.5,"Train a Decision Tree first.",cex=1.2);return()}; if(has_pkg("rpart.plot"))rpart.plot::rpart.plot(dt$fit,main="Decision Tree",roundint=FALSE) else{plot(dt$fit);text(dt$fit,use.n=TRUE,cex=0.8)} })
 
@@ -1100,60 +1411,212 @@ server <- function(input, output, session) {
   parsed_doe_names <- reactive({ nm<-trimws(strsplit(input$doe_names%||%"",",")[[1]]); nm<-nm[nm!=""]; n<-input$doe_k%||%3; if(length(nm)<n)nm<-c(nm,paste0("X",seq(length(nm)+1,n))); nm[seq_len(n)] })
   gen_doe_r <- eventReactive(input$gen_doe, { tryCatch(make_design(input$doe_type,parsed_doe_names(),input$doe_runs,input$doe_levels,input$doe_cp,isTRUE(input$doe_rand)),error=function(e){showNotification(e$message,type="error");NULL}) })
   output$doe_tbl <- renderDT({ des<-gen_doe_r();req(des);datatable(des,options=list(pageLength=10,scrollX=TRUE),rownames=FALSE) })
-  output$doe_plot <- renderPlot({ des<-gen_doe_r();req(des);validate(need(ncol(des)>=2,"Need 2+ cols.")); pd<-des;pd$.run<-seq_len(nrow(pd)); ggplot(pd,aes(.data[[names(pd)[1]]],.data[[names(pd)[2]]],label=.run))+geom_point(size=3)+geom_text(vjust=-0.7,size=3)+labs(title="Design map")+theme_minimal(base_size=12) })
+  output$doe_plot <- renderPlot({ des<-gen_doe_r();req(des);validate(need(ncol(des)>=2,"Need 2+ cols.")); pd<-des;pd$.run<-seq_len(nrow(pd)); ggplot(pd,aes(.data[[names(pd)[1]]],.data[[names(pd)[2]]],label=.run))+geom_point(size=3,color="#2C5A8F")+geom_text(vjust=-0.7,size=3)+labs(title="Design Map")+theme_kernel() })
   doe_r <- eventReactive(input$run_doe, { df<-doctor_data();req(df,input$doe_resp,input$doe_factors);ddf<-df[,unique(c(input$doe_resp,input$doe_factors)),drop=FALSE];ddf<-safe_complete(ddf);validate(need(nrow(ddf)>=5,"Need 5+ rows.")); rhs<-paste(input$doe_factors,collapse="+"); if(isTRUE(input$doe_ia)&&length(input$doe_factors)>1)rhs<-paste0("(",rhs,")^2"); list(fit=lm(as.formula(paste(input$doe_resp,"~",rhs)),data=ddf),data=ddf) })
   output$doe_anova <- renderDT({ res<-doe_r();out<-as.data.frame(anova(res$fit));out$term<-rownames(out);rownames(out)<-NULL; datatable(out[,c("term",setdiff(names(out),"term"))],options=list(dom="tip",scrollX=TRUE),rownames=FALSE) })
-  output$doe_effects <- renderPlot({ res<-doe_r();df<-res$data;resp<-input$doe_resp;fcts<-input$doe_factors; edf<-purrr::map_dfr(fcts,function(f){df|>mutate(.lev=as.factor(.data[[f]]))|>group_by(.lev)|>summarise(mean_r=mean(.data[[resp]],na.rm=TRUE),.groups="drop")|>mutate(factor=f)}); ggplot(edf,aes(.lev,mean_r,group=1))+geom_line()+geom_point(size=2.5)+facet_wrap(~factor,scales="free_x")+labs(title="Main effects",x="Level",y=paste("Mean",resp))+theme_minimal(base_size=12) })
+  output$doe_effects <- renderPlot({ res<-doe_r();df<-res$data;resp<-input$doe_resp;fcts<-input$doe_factors; edf<-purrr::map_dfr(fcts,function(f){df|>mutate(.lev=as.factor(.data[[f]]))|>group_by(.lev)|>summarise(mean_r=mean(.data[[resp]],na.rm=TRUE),.groups="drop")|>mutate(factor=f)}); ggplot(edf,aes(.lev,mean_r,group=1))+geom_line(color="#2C5A8F")+geom_point(size=2.5,color="#2C5A8F")+facet_wrap(~factor,scales="free_x")+labs(title="Main Effects",x="Level",y=paste("Mean",resp))+theme_kernel() })
 
-  # ── Report ──
-  output$rpt_preview <- renderUI({ df<-doctor_data(); if(is.null(df))return(div(class="tab-note",p("Upload data first."))); f<-doc_findings();fl<-doc$fix_log; div(style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:10px;padding:16px;", tags$h5("Data"),tags$ul(tags$li(paste0("Rows: ",nrow(df)," | Cols: ",ncol(df))),tags$li(paste0("Missing: ",sum(is.na(df))))), if(nrow(f)>0)tags$h5(paste0("Doctor: ",sum(f$severity=="critical")," critical, ",sum(f$severity=="warning")," warnings")), if(length(fl)>0)tagList(tags$h5(paste0("Fixes (",length(fl),")")),tags$ul(lapply(fl,tags$li)))) })
+  # ── Report (Professional via rmarkdown) ──
+  output$rpt_preview <- renderUI({
+    df<-doctor_data()
+    if(is.null(df)) return(div(class="section-note",p("Upload data to generate a report.")))
+    f<-doc_findings(); fl<-doc$fix_log
+    tagList(
+      tags$table(class="table table-sm", style="max-width:400px;",
+        tags$tr(tags$td(strong("Rows")),tags$td(format(nrow(df),big.mark=","))),
+        tags$tr(tags$td(strong("Columns")),tags$td(ncol(df))),
+        tags$tr(tags$td(strong("Numeric")),tags$td(length(numeric_vars_of(df)))),
+        tags$tr(tags$td(strong("Missing")),tags$td(format(sum(is.na(df)),big.mark=",")))
+      ),
+      if(nrow(f)>0) p(strong("Doctor:"), sum(f$severity=="critical")," critical, ", sum(f$severity=="warning"), " warnings"),
+      if(length(fl)>0) tagList(p(strong("Fixes applied: "),length(fl)), tags$ul(style="font-size:0.85rem;",lapply(fl,tags$li)))
+    )
+  })
 
   output$gen_report <- downloadHandler(
-    filename=function()paste0("kernel_report_",Sys.Date(),".",input$rpt_fmt%||%"html"),
-    content=function(file){
-      df<-doctor_data();req(df);f<-doc_findings();fl<-doc$fix_log
-      md<-c(paste0("# ",input$rpt_title%||%"Report"),if(nzchar(input$rpt_author%||%""))paste0("**Author:** ",input$rpt_author),paste0("**Date:** ",Sys.time()),"","---","",
-        "## Data Overview","",paste0("- Rows: ",nrow(df)),paste0("- Columns: ",ncol(df)),paste0("- Numeric: ",length(numeric_vars_of(df))),paste0("- Missing: ",sum(is.na(df))),"")
-      if(nrow(f)>0) md<-c(md,"## Variable Doctor","",paste0("- Critical: ",sum(f$severity=="critical")),paste0("- Warnings: ",sum(f$severity=="warning")),"")
-      if(length(fl)>0) md<-c(md,"## Fixes Applied","",paste0("1. ",fl),"")
-      prof<-column_profile(df); md<-c(md,"## Column Profile","",paste0("| ",paste(names(prof),collapse=" | ")," |"),paste0("| ",paste(rep("---",ncol(prof)),collapse=" | ")," |"),apply(prof,1,function(r)paste0("| ",paste(r,collapse=" | ")," |")),"")
-      md<-c(md,"","---",paste0("*Generated by Kernel — ",Sys.time(),"*"))
-      mt<-paste(md,collapse="\n")
-      if((input$rpt_fmt%||%"html")=="md") writeLines(mt,file)
-      else{html<-paste0("<html><head><meta charset='utf-8'><title>",input$rpt_title%||%"Report","</title><style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;}th{background:#f5f5f5;}</style></head><body>",gsub("\n","<br>",mt),"</body></html>");writeLines(html,file)}
+    filename = function() {
+      fmt <- input$rpt_fmt %||% "html"
+      ext <- switch(fmt, "docx" = "docx", "md" = "md", "html")
+      paste0("kernel_report_", Sys.Date(), ".", ext)
+    },
+    content = function(file) {
+      df <- doctor_data(); req(df)
+      f <- doc_findings(); fl <- doc$fix_log
+      fmt <- input$rpt_fmt %||% "html"
+
+      # Try rmarkdown first for html/docx
+      if (fmt %in% c("html", "docx") && has_pkg("rmarkdown")) {
+        rmd_path <- file.path(APP_DIR, "report_template.Rmd")
+        if (file.exists(rmd_path)) {
+          tmp_rmd <- file.path(tempdir(), "kernel_report.Rmd")
+          file.copy(rmd_path, tmp_rmd, overwrite = TRUE)
+
+          out_format <- if (fmt == "docx") "word_document" else "html_document"
+
+          tryCatch({
+            rmarkdown::render(
+              tmp_rmd,
+              output_format = out_format,
+              output_file = file,
+              params = list(
+                title = input$rpt_title %||% "Kernel Analysis Report",
+                author = input$rpt_author %||% "",
+                data = df,
+                doctor_findings = if (isTRUE(input$rpt_inc_doctor)) f else data.frame(),
+                fix_log = if (isTRUE(input$rpt_inc_doctor)) fl else character(),
+                include_doctor = isTRUE(input$rpt_inc_doctor),
+                include_summary = isTRUE(input$rpt_inc_stats),
+                include_profile = isTRUE(input$rpt_inc_profile),
+                include_plots = isTRUE(input$rpt_inc_plots)
+              ),
+              envir = new.env(parent = globalenv()),
+              quiet = TRUE
+            )
+            return(invisible())
+          }, error = function(e) {
+            showNotification(paste("rmarkdown error:", e$message, "— falling back to basic report."), type = "warning")
+          })
+        }
+      }
+
+      # Fallback: build HTML/Markdown manually
+      title <- input$rpt_title %||% "Kernel Analysis Report"
+      author <- input$rpt_author %||% ""
+
+      md <- c(
+        paste0("# ", title),
+        if (nzchar(author)) paste0("**Author:** ", author),
+        paste0("**Date:** ", format(Sys.time(), "%B %d, %Y at %I:%M %p")),
+        "", "---", ""
+      )
+
+      if (isTRUE(input$rpt_inc_summary)) {
+        md <- c(md, "## Executive Summary", "",
+          paste0("| Metric | Value |"), "| --- | --- |",
+          paste0("| Observations | ", format(nrow(df), big.mark=","), " |"),
+          paste0("| Variables | ", ncol(df), " |"),
+          paste0("| Numeric | ", length(numeric_vars_of(df)), " |"),
+          paste0("| Categorical | ", length(categorical_vars_of(df)), " |"),
+          paste0("| Missing values | ", format(sum(is.na(df)), big.mark=","), " |"),
+          paste0("| Complete rows | ", format(sum(complete.cases(df)), big.mark=","), " |"),
+          "")
+      }
+
+      if (isTRUE(input$rpt_inc_doctor) && nrow(f) > 0) {
+        md <- c(md, "## Data Quality Assessment", "",
+          paste0("- Critical: ", sum(f$severity=="critical")),
+          paste0("- Warnings: ", sum(f$severity=="warning")),
+          paste0("- Info: ", sum(f$severity=="info")), "")
+      }
+
+      if (isTRUE(input$rpt_inc_doctor) && length(fl) > 0) {
+        md <- c(md, "## Fixes Applied", "", paste0(seq_along(fl), ". ", fl), "")
+      }
+
+      if (isTRUE(input$rpt_inc_profile)) {
+        prof <- column_profile(df)
+        md <- c(md, "## Column Profile", "",
+          paste0("| ", paste(names(prof), collapse=" | "), " |"),
+          paste0("| ", paste(rep("---", ncol(prof)), collapse=" | "), " |"),
+          apply(prof, 1, function(r) paste0("| ", paste(r, collapse=" | "), " |")),
+          "")
+      }
+
+      if (isTRUE(input$rpt_inc_stats)) {
+        nums <- df[, vapply(df, is.numeric, logical(1)), drop=FALSE]
+        if (ncol(nums) > 0) {
+          summ <- do.call(rbind, lapply(names(nums), function(nm) {
+            x <- nums[[nm]]
+            data.frame(Variable=nm, n=sum(!is.na(x)), Mean=round(mean(x,na.rm=T),4), SD=round(sd(x,na.rm=T),4),
+              Min=round(min(x,na.rm=T),4), Median=round(median(x,na.rm=T),4), Max=round(max(x,na.rm=T),4))
+          }))
+          md <- c(md, "## Numeric Summary Statistics", "",
+            paste0("| ", paste(names(summ), collapse=" | "), " |"),
+            paste0("| ", paste(rep("---", ncol(summ)), collapse=" | "), " |"),
+            apply(summ, 1, function(r) paste0("| ", paste(r, collapse=" | "), " |")),
+            "")
+        }
+      }
+
+      md <- c(md, "---", "", paste0("*Generated by Kernel \u2014 kernelstats.com \u2014 ", format(Sys.time(), "%B %d, %Y"), "*"))
+      mt <- paste(md, collapse = "\n")
+
+      if (fmt == "md") {
+        writeLines(mt, file)
+      } else {
+        html <- paste0(
+          '<!DOCTYPE html><html><head><meta charset="utf-8"><title>', title, '</title>',
+          '<style>',
+          'body{font-family:"Inter",system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 24px;line-height:1.7;color:#1B3D66;background:#fff;}',
+          'h1{color:#1B3D66;border-bottom:3px solid #2C5A8F;padding-bottom:8px;}',
+          'h2{color:#2C5A8F;margin-top:2em;}',
+          'table{border-collapse:collapse;width:100%;margin:16px 0;}',
+          'th{background:#EBF1F9;color:#1B3D66;font-weight:600;border:1px solid #C5D6EB;padding:8px 12px;text-align:left;}',
+          'td{border:1px solid #C5D6EB;padding:6px 12px;}',
+          'tr:nth-child(even){background:#F8FAFD;}',
+          'hr{border:none;border-top:2px solid #EBF1F9;margin:2em 0;}',
+          'em{color:#7A99B8;}',
+          '</style></head><body>',
+          gsub("\n", "<br>", mt),
+          '</body></html>'
+        )
+        writeLines(html, file)
+      }
     }
   )
-  output$code_export <- renderText({ df<-doctor_data(); if(is.null(df))return("# Upload data first."); paste(c("# Kernel — R Code","# Generated:",as.character(Sys.time()),"","library(readr)","library(dplyr)","library(ggplot2)","",paste0("# Data: ",nrow(df)," x ",ncol(df)),"# df <- read_csv('your_data.csv')","","# EDA","# ggplot(df, aes(x = var)) + geom_histogram(bins = 30)","","# Regression","# fit <- lm(y ~ x1 + x2, data = df)","# summary(fit)"),collapse="\n") })
+
+  output$code_export <- renderText({
+    df <- doctor_data()
+    if (is.null(df)) return("# Upload data first.")
+    paste(c(
+      "# ═══════════════════════════════════════════",
+      "# Kernel \u2014 R Code Export",
+      paste0("# Generated: ", Sys.time()),
+      "# ═══════════════════════════════════════════",
+      "", "library(readr)", "library(dplyr)", "library(ggplot2)", "",
+      paste0("# Data: ", nrow(df), " rows x ", ncol(df), " columns"),
+      "# df <- read_csv('your_data.csv')", "",
+      "# Univariate EDA",
+      "# ggplot(df, aes(x = var)) + geom_histogram(bins = 30, fill = '#2C5A8F')", "",
+      "# Regression",
+      "# fit <- lm(y ~ x1 + x2, data = df)",
+      "# summary(fit)", "",
+      "# Time Series",
+      "# library(forecast)",
+      "# fit <- auto.arima(ts_data)",
+      "# forecast(fit, h = 12)"
+    ), collapse = "\n")
+  })
   output$dl_code <- downloadHandler(filename=function()paste0("kernel_code_",Sys.Date(),".R"),content=function(file)writeLines(output$code_export(),file))
 
   # ── Templates ──
   spc_r <- eventReactive(input$run_spc, { df<-doctor_data();req(df,input$spc_var);x<-df[[input$spc_var]];x<-x[!is.na(x)];validate(need(length(x)>=10,"Need 10+ obs.")); control_chart_stats(x,input$spc_type,input$spc_n) })
-  output$spc_chart <- renderPlot({ cc<-spc_r();ooc<-cc$values>cc$ucl|cc$values<cc$lcl; ggplot(data.frame(i=cc$index,v=cc$values,o=ooc),aes(i,v))+geom_line(color="#0d6efd",linewidth=0.7)+geom_point(aes(color=o),size=2,show.legend=FALSE)+scale_color_manual(values=c("FALSE"="#0d6efd","TRUE"="#dc3545"))+geom_hline(yintercept=cc$cl,color="#198754",linewidth=1)+geom_hline(yintercept=c(cc$ucl,cc$lcl),linetype="dashed",color="#dc3545")+labs(title=paste("Control Chart:",cc$type),x="Observation",y=input$spc_var)+theme_minimal(base_size=13) })
-  output$spc_ooc <- renderUI({ cc<-spc_r();n<-sum(cc$values>cc$ucl|cc$values<cc$lcl);cl<-if(n>0)"#dc3545" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","OOC"),div(class="value",style=paste0("color:",cl,";"),n)) })
+  output$spc_chart <- renderPlot({ cc<-spc_r();ooc<-cc$values>cc$ucl|cc$values<cc$lcl; ggplot(data.frame(i=cc$index,v=cc$values,o=ooc),aes(i,v))+geom_line(color="#2C5A8F",linewidth=0.7)+geom_point(aes(color=o),size=2,show.legend=FALSE)+scale_color_manual(values=c("FALSE"="#2C5A8F","TRUE"="#DC3545"))+geom_hline(yintercept=cc$cl,color="#198754",linewidth=1)+geom_hline(yintercept=c(cc$ucl,cc$lcl),linetype="dashed",color="#DC3545")+labs(title=paste("Control Chart:",cc$type),x="Observation",y=input$spc_var)+theme_kernel() })
+  output$spc_ooc <- renderUI({ cc<-spc_r();n<-sum(cc$values>cc$ucl|cc$values<cc$lcl);cl<-if(n>0)"#DC3545" else "#198754"; div(class="stat-card",style=paste0("border-left:4px solid ",cl,";"),div(class="label","OOC"),div(class="value",style=paste0("color:",cl,";"),n)) })
   output$spc_stats <- renderDT({ cc<-spc_r();n_ooc<-sum(cc$values>cc$ucl|cc$values<cc$lcl); datatable(data.frame(metric=c("CL","UCL","LCL","Sigma","n","OOC","% OOC"),value=c(round(cc$cl,4),round(cc$ucl,4),round(cc$lcl,4),round(cc$sigma,4),length(cc$values),n_ooc,round(n_ooc/length(cc$values)*100,1))),options=list(dom="t"),rownames=FALSE) })
 
   cap_r <- eventReactive(input$run_cap, { df<-doctor_data();req(df,input$cap_var);validate(need(!is.na(input$cap_lsl)&&!is.na(input$cap_usl),"Enter LSL and USL."),need(input$cap_usl>input$cap_lsl,"USL > LSL.")); x<-df[[input$cap_var]];x<-x[!is.na(x)];validate(need(length(x)>=10,"Need 10+ obs.")); list(stats=process_capability(x,input$cap_lsl,input$cap_usl),x=x,lsl=input$cap_lsl,usl=input$cap_usl) })
-  output$cap_plot <- renderPlot({ cr<-cap_r(); ggplot(data.frame(x=cr$x),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#0d6efd",alpha=0.5,color="white")+geom_density(linewidth=1.2,color="#0d6efd")+geom_vline(xintercept=c(cr$lsl,cr$usl),linetype="dashed",color="#dc3545",linewidth=1)+geom_vline(xintercept=mean(cr$x),color="#198754",linewidth=1)+labs(title="Process capability")+theme_minimal(base_size=13) })
+  output$cap_plot <- renderPlot({ cr<-cap_r(); ggplot(data.frame(x=cr$x),aes(x=x))+geom_histogram(aes(y=after_stat(density)),bins=30,fill="#2C5A8F",alpha=0.5,color="white")+geom_density(linewidth=1.2,color="#2C5A8F")+geom_vline(xintercept=c(cr$lsl,cr$usl),linetype="dashed",color="#DC3545",linewidth=1)+geom_vline(xintercept=mean(cr$x),color="#198754",linewidth=1)+labs(title="Process Capability")+theme_kernel() })
   output$cap_tbl <- renderDT({ datatable(cap_r()$stats,options=list(dom="t"),rownames=FALSE) })
 
   rfm_r <- eventReactive(input$run_rfm, { df<-doctor_data();req(df,input$rfm_cust,input$rfm_date,input$rfm_amt); compute_rfm(df,input$rfm_cust,input$rfm_date,input$rfm_amt) })
   output$rfm_tbl <- renderDT({ datatable(rfm_r(),options=list(pageLength=10,scrollX=TRUE,dom="ftip"),rownames=FALSE) })
-  output$rfm_seg <- renderPlot({ rfm<-rfm_r();sc<-rfm|>count(segment,sort=TRUE); ggplot(sc,aes(reorder(segment,n),n,fill=segment))+geom_col(show.legend=FALSE,alpha=0.85)+coord_flip()+scale_fill_manual(values=c("Champions"="#198754","Regular"="#0d6efd","New"="#20c997","At risk"="#fd7e14","Lost"="#dc3545"))+labs(title="Segments",x=NULL,y="Count")+theme_minimal(base_size=13) })
-  output$rfm_scatter <- renderPlot({ rfm<-rfm_r(); ggplot(rfm,aes(recency,monetary,size=frequency,color=segment))+geom_point(alpha=0.6)+scale_size_continuous(range=c(2,10))+scale_color_manual(values=c("Champions"="#198754","Regular"="#0d6efd","New"="#20c997","At risk"="#fd7e14","Lost"="#dc3545"))+labs(title="RFM scatter")+theme_minimal(base_size=12) })
-  output$rfm_heat <- renderPlot({ rfm<-rfm_r();hd<-rfm|>group_by(R_score,F_score)|>summarise(m=mean(monetary,na.rm=TRUE),.groups="drop"); ggplot(hd,aes(factor(F_score),factor(R_score),fill=m))+geom_tile(color="white")+geom_text(aes(label=round(m,0)),size=3.5)+scale_fill_gradient(low="#EBF1F9",high="#0d6efd")+labs(title="RFM heatmap",x="Frequency",y="Recency")+theme_minimal(base_size=12)+theme(panel.grid=element_blank()) })
+  output$rfm_seg <- renderPlot({ rfm<-rfm_r();sc<-rfm|>count(segment,sort=TRUE); ggplot(sc,aes(reorder(segment,n),n,fill=segment))+geom_col(show.legend=FALSE,alpha=0.85)+coord_flip()+scale_fill_manual(values=c("Champions"="#198754","Regular"="#2C5A8F","New"="#14B8A6","At risk"="#FD7E14","Lost"="#DC3545"))+labs(title="Customer Segments",x=NULL,y="Count")+theme_kernel() })
+  output$rfm_scatter <- renderPlot({ rfm<-rfm_r(); ggplot(rfm,aes(recency,monetary,size=frequency,color=segment))+geom_point(alpha=0.6)+scale_size_continuous(range=c(2,10))+scale_color_manual(values=c("Champions"="#198754","Regular"="#2C5A8F","New"="#14B8A6","At risk"="#FD7E14","Lost"="#DC3545"))+labs(title="RFM Scatter")+theme_kernel() })
+  output$rfm_heat <- renderPlot({ rfm<-rfm_r();hd<-rfm|>group_by(R_score,F_score)|>summarise(m=mean(monetary,na.rm=TRUE),.groups="drop"); ggplot(hd,aes(factor(F_score),factor(R_score),fill=m))+geom_tile(color="white")+geom_text(aes(label=round(m,0)),size=3.5)+scale_fill_gradient(low="#EBF1F9",high="#2C5A8F")+labs(title="RFM Heatmap",x="Frequency Score",y="Recency Score")+theme_kernel()+theme(panel.grid=element_blank()) })
 
   pareto_r <- eventReactive(input$run_pareto, { df<-doctor_data();req(df,input$pareto_var);tab<-sort(table(df[[input$pareto_var]]),decreasing=TRUE); d<-data.frame(cat=factor(names(tab),levels=names(tab)),count=as.integer(tab)); d$pct<-d$count/sum(d$count)*100; d$cum<-cumsum(d$pct); d })
-  output$pareto_plot <- renderPlot({ d<-pareto_r();co<-max(d$count)/100; ggplot(d,aes(x=cat))+geom_col(aes(y=count),fill="#0d6efd",alpha=0.8,width=0.7)+geom_line(aes(y=cum*co,group=1),color="#dc3545",linewidth=1.2)+geom_point(aes(y=cum*co),color="#dc3545",size=3)+geom_hline(yintercept=80*co,linetype="dashed",color="#999")+scale_y_continuous(name="Count",sec.axis=sec_axis(~./co,name="Cumulative %"))+labs(title="Pareto chart",x=NULL)+theme_minimal(base_size=13)+theme(axis.text.x=element_text(angle=45,hjust=1)) })
+  output$pareto_plot <- renderPlot({ d<-pareto_r();co<-max(d$count)/100; ggplot(d,aes(x=cat))+geom_col(aes(y=count),fill="#2C5A8F",alpha=0.8,width=0.7)+geom_line(aes(y=cum*co,group=1),color="#DC3545",linewidth=1.2)+geom_point(aes(y=cum*co),color="#DC3545",size=3)+geom_hline(yintercept=80*co,linetype="dashed",color="#999")+scale_y_continuous(name="Count",sec.axis=sec_axis(~./co,name="Cumulative %"))+labs(title="Pareto Chart",x=NULL)+theme_kernel()+theme(axis.text.x=element_text(angle=45,hjust=1)) })
 
   heat_r <- eventReactive(input$run_heat, { df<-doctor_data();req(df,input$heat_vars);validate(need(length(input$heat_vars)>=2,"Need 2+ vars."));nums<-df[,input$heat_vars,drop=FALSE];nums<-safe_complete(nums);validate(need(nrow(nums)>=3,"Need 3+ rows.")); list(data=nums,scale=input$heat_scale) })
   output$tmpl_heatmap <- renderPlot({ hr<-heat_r();mat<-as.matrix(hr$data); if(hr$scale=="row")mat<-t(scale(t(mat))) else if(hr$scale=="column")mat<-scale(mat); heatmap(mat,scale="none",col=colorRampPalette(c("#2166AC","white","#B2182B"))(50),margins=c(8,8),main="Heatmap") })
 
   volc_r <- eventReactive(input$run_volc, { df<-doctor_data();req(df,input$volc_fc,input$volc_p); data.frame(fc=df[[input$volc_fc]],pval=df[[input$volc_p]]) })
-  output$volc_plot <- renderPlot({ vr<-volc_r();vr<-vr[!is.na(vr$fc)&!is.na(vr$pval)&vr$pval>0,];vr$lp<--log10(vr$pval);ft<-input$volc_fc_t;pt<-input$volc_p_t; vr$sig<-ifelse(abs(vr$fc)>=ft&vr$pval<pt,ifelse(vr$fc>0,"Up","Down"),"NS"); ggplot(vr,aes(fc,lp,color=sig))+geom_point(alpha=0.6,size=1.5)+scale_color_manual(values=c("Up"="#dc3545","Down"="#0d6efd","NS"="#ccc"))+geom_vline(xintercept=c(-ft,ft),linetype="dashed",color="#999")+geom_hline(yintercept=-log10(pt),linetype="dashed",color="#999")+labs(title="Volcano plot",x="Log2 FC",y="-Log10 p")+theme_minimal(base_size=13) })
+  output$volc_plot <- renderPlot({ vr<-volc_r();vr<-vr[!is.na(vr$fc)&!is.na(vr$pval)&vr$pval>0,];vr$lp<--log10(vr$pval);ft<-input$volc_fc_t;pt<-input$volc_p_t; vr$sig<-ifelse(abs(vr$fc)>=ft&vr$pval<pt,ifelse(vr$fc>0,"Up","Down"),"NS"); ggplot(vr,aes(fc,lp,color=sig))+geom_point(alpha=0.6,size=1.5)+scale_color_manual(values=c("Up"="#DC3545","Down"="#2C5A8F","NS"="#ccc"))+geom_vline(xintercept=c(-ft,ft),linetype="dashed",color="#999")+geom_hline(yintercept=-log10(pt),linetype="dashed",color="#999")+labs(title="Volcano Plot",x="Log2 FC",y="-Log10 p")+theme_kernel() })
 
   # ── Sample datasets ──
-  observeEvent(input$load_sample, { ds<-input$sample_ds;df<-tryCatch(as.data.frame(get(ds)),error=function(e)NULL); if(!is.null(df)){doc$original<-df;doc$current<-df;doc$fix_log<-c(doc$fix_log,paste0("Loaded: ",ds));doc$fix_count<-0;showNotification(paste0("Loaded '",ds,"' (",nrow(df),"x",ncol(df),")"),type="message")} })
-  output$sample_info <- renderUI({ div(class="tab-note",p(switch(input$sample_ds,"mtcars"="32 cars, 11 vars.","iris"="150 flowers, 3 species.","airquality"="NYC air quality. Has NAs.","ToothGrowth"="Vitamin C experiment.","PlantGrowth"="3 conditions.","ChickWeight"="Growth curves by diet.","USArrests"="50 states, crime data.","faithful"="Old Faithful geyser.","swiss"="47 provinces.","sleep"="Paired drug trial.","chickwts"="6 feed types.","InsectSprays"="6 sprays.","warpbreaks"="Wool/tension breaks.","Select a dataset."))) })
+  observeEvent(input$load_sample, { ds<-input$sample_ds;df<-tryCatch(as.data.frame(get(ds)),error=function(e)NULL); if(!is.null(df)){doc$original<-df;doc$current<-df;doc$fix_log<-c(doc$fix_log,paste0("Loaded sample: ",ds));doc$fix_count<-0;showNotification(paste0("Loaded '",ds,"' (",nrow(df)," \u00D7 ",ncol(df),")"),type="message")} })
+  output$sample_info <- renderUI({ div(style="margin-top:8px;font-size:0.85rem;color:#5A7BA6;",p(switch(input$sample_ds,"mtcars"="32 cars, 11 variables.","iris"="150 flowers, 3 species.","airquality"="NYC air quality. Has NAs.","ToothGrowth"="Vitamin C experiment.","PlantGrowth"="3 conditions.","ChickWeight"="Growth curves by diet.","USArrests"="50 states, crime data.","faithful"="Old Faithful geyser.","swiss"="47 provinces.","sleep"="Paired drug trial.","chickwts"="6 feed types.","InsectSprays"="6 sprays.","warpbreaks"="Wool/tension breaks.","Select a dataset."))) })
 
   # ── Downloads ──
   output$download_clean_data <- downloadHandler(filename=function()paste0("kernel_clean_",Sys.Date(),".csv"),content=function(file){readr::write_csv(doctor_data(),file)})
